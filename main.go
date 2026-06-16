@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/Geergon/Chronicler-tg-bot/internal/tgbot"
 	"github.com/mymmrac/telego"
 	th "github.com/mymmrac/telego/telegohandler"
 	tu "github.com/mymmrac/telego/telegoutil"
@@ -35,13 +36,15 @@ func init() {
 }
 
 func main() {
-	botToken := os.Getenv("TOKEN")
+	// botToken := os.Getenv("TOKEN")
+	botToken := ***REMOVED***
 
 	// TODO: remove later telego.With Default DebugLogger()
-	bot, err := telego.NewBot(botToken, telego.WithDefaultDebugLogger())
+	bot, err := telego.NewBot(botToken)
 	if err != nil {
 		log.Fatalf("failed to initialize bot: %v", err)
 	}
+	fmt.Println("Start Chronicler bot")
 
 	ctx := context.Background()
 	updates, _ := bot.UpdatesViaLongPolling(ctx, nil)
@@ -52,11 +55,14 @@ func main() {
 	bh.Handle(func(ctx *th.Context, update telego.Update) error {
 		_, _ = ctx.Bot().SendMessage(ctx, tu.Message(
 			tu.ID(update.Message.Chat.ID),
-			fmt.Sprint("Вас вітає бот літописець для збереження цитат в стікери.", update.Message.From.FirstName),
+			fmt.Sprint("Вас вітає бот літописець для збереження цитат в стікери."),
 		))
 		return nil
 	}, th.CommandEqual("start"))
 	bh.Handle(func(ctx *th.Context, update telego.Update) error {
+		tgbot.GenerateQuote(ctx, update)
 		return nil
 	}, th.CommandEqual("q"))
+
+	_ = bh.Start()
 }
