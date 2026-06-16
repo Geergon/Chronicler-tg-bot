@@ -3,8 +3,10 @@ package tgbot
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"log"
 
+	"github.com/Geergon/Chronicler-tg-bot/internal/render"
 	"github.com/mymmrac/telego"
 )
 
@@ -14,25 +16,27 @@ func GenerateQuote(ctx context.Context, update telego.Update) error {
 		return nil
 	}
 
-	chatID := update.Message.Chat.ID
+	// chatID := update.Message.Chat.ID
 
-	var userID int64
-	var userFirstName string
-	if update.Message.From != nil {
-		userID = update.Message.From.ID
-		userFirstName = update.Message.From.FirstName
-	}
+	// var userID int64
+	// var userFirstName string
+	// var userLastName string
+	// if update.Message.From != nil {
+	// 	userID = update.Message.From.ID
+	// 	userFirstName = update.Message.From.FirstName
+	// 	userLastName = update.Message.From.LastName
+	// }
 
 	text := update.Message.Text
 	if update.Message.Quote != nil {
 		text = update.Message.Quote.Text
 	}
 
-	var replyText string
-	var replySenderID inint64
+	// var replyText string
+	var replySenderID int64
 	var replySenderFirstName string
 	var replySenderLastName string
-	var replyMessageQuote string
+	// var replyMessageQuote string
 	if update.Message.ReplyToMessage != nil {
 		replyText := update.Message.ReplyToMessage.Text
 		fmt.Printf("Reply Text: %s\n", replyText)
@@ -45,9 +49,9 @@ func GenerateQuote(ctx context.Context, update telego.Update) error {
 			}
 		}
 
-		if update.Message.ReplyToMessage.Quote != nil {
-			replyMessageQuote = update.Message.ReplyToMessage.Quote.Text
-		}
+		// if update.Message.ReplyToMessage.Quote != nil {
+		// 	replyMessageQuote = update.Message.ReplyToMessage.Quote.Text
+		// }
 
 		// if update.Message.ReplyToMessage.ForwardOrigin != nil {
 		// 	o := update.Message.ReplyToMessage.ForwardOrigin
@@ -58,6 +62,28 @@ func GenerateQuote(ctx context.Context, update telego.Update) error {
 
 	} else {
 		log.Println("message is not reply (ReplyToMessage is nil)")
+	}
+
+	messages := []render.ChatMessage{
+		{
+			AuthorID:    replySenderID,
+			AuthorName:  replySenderFirstName + replySenderLastName,
+			AvatarImg:   nil,
+			BubbleColor: color.RGBA{45, 40, 60, 255},
+			// Media: []image.Image{media1, media2},
+			Segments: []render.TextSegment{
+				{Text: text, Color: color.RGBA{255, 255, 255, 255}},
+			},
+		},
+	}
+
+	stack, err := render.BuildStickerChatStack(messages)
+	if err != nil {
+		log.Fatal("build chat stack:", err)
+	}
+
+	if err := render.SavePNG("out_chat_stack.png", stack.Image()); err != nil {
+		log.Fatal("save:", err)
 	}
 
 	return nil
