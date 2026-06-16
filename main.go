@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/Geergon/Chronicler-tg-bot/internal/render"
 	"github.com/Geergon/Chronicler-tg-bot/internal/tgbot"
 	"github.com/mymmrac/telego"
 	th "github.com/mymmrac/telego/telegohandler"
@@ -36,9 +37,11 @@ func init() {
 }
 
 func main() {
+	if err := render.InitFonts(); err != nil {
+		log.Fatal("render init fonts:", err)
+	}
 	botToken := os.Getenv("TOKEN")
 
-	// TODO: remove later telego.With Default DebugLogger()
 	bot, err := telego.NewBot(botToken)
 	if err != nil {
 		log.Fatalf("failed to initialize bot: %v", err)
