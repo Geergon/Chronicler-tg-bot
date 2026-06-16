@@ -36,8 +36,7 @@ func init() {
 }
 
 func main() {
-	// botToken := os.Getenv("TOKEN")
-	botToken := ***REMOVED***
+	botToken := os.Getenv("TOKEN")
 
 	// TODO: remove later telego.With Default DebugLogger()
 	bot, err := telego.NewBot(botToken)
