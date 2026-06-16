@@ -1,17 +1,20 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/Geergon/Chronicler-tg-bot/internal/render"
 	"github.com/Geergon/Chronicler-tg-bot/internal/tgbot"
+	"github.com/celestix/gotgproto"
+	"github.com/celestix/gotgproto/dispatcher/handlers"
+	"github.com/celestix/gotgproto/ext"
+	"github.com/celestix/gotgproto/sessionMaker"
+	"github.com/glebarez/sqlite"
+	"github.com/gotd/td/tg"
 	"github.com/joho/godotenv"
-	"github.com/mymmrac/telego"
-	th "github.com/mymmrac/telego/telegohandler"
-	tu "github.com/mymmrac/telego/telegoutil"
 	"github.com/tdewolff/canvas"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -46,34 +49,69 @@ func main() {
 		log.Fatal("render init fonts:", err)
 	}
 
-	botToken, exist := os.LookupEnv("TOKEN")
-	if !exist {
-		log.Fatal("invalid bot token")
+	a, isAppIdExist := os.LookupEnv("APP_ID")
+	if !isAppIdExist {
+		log.Fatal("invalid APP_ID")
 	}
-
-	bot, err := telego.NewBot(botToken)
+	appId, err := strconv.Atoi(a)
 	if err != nil {
-		log.Fatalf("failed to initialize bot: %v", err)
+		fmt.Errorf("failed to get appID: %v", err)
 	}
-	fmt.Println("Start Chronicler bot")
 
-	ctx := context.Background()
-	updates, _ := bot.UpdatesViaLongPolling(ctx, nil)
+	apiHash, isHashExist := os.LookupEnv("API_HASH")
+	if !isHashExist {
+		log.Fatal("invalid  API_HASH")
+	}
 
-	bh, _ := th.NewBotHandler(bot, updates)
-	defer func() { _ = bh.Stop() }()
+	botToken, isTokenExist := os.LookupEnv("TOKEN")
+	if !isTokenExist {
+		log.Fatal("invalid BOT_TOKEN")
+	}
 
-	bh.Handle(func(ctx *th.Context, update telego.Update) error {
-		_, _ = ctx.Bot().SendMessage(ctx, tu.Message(
-			tu.ID(update.Message.Chat.ID),
-			fmt.Sprint("Вас вітає бот літописець для збереження цитат в стікери."),
-		))
+	client, err := gotgproto.NewClient(
+		// Get AppID from https://my.telegram.org/apps
+		appId,
+		// Get ApiHash from https://my.telegram.org/apps
+		apiHash,
+		// ClientType, as we defined above
+		gotgproto.ClientTypeBot(botToken),
+		// Optional parameters of client
+		&gotgproto.ClientOpts{
+			Session:               sessionMaker.SqlSession(sqlite.Open("./db/session")),
+			AutoFetchReply:        true,
+			FetchEntireReplyChain: true,
+		},
+	)
+	if err != nil {
+		log.Fatalln("failed to start bot:", err)
+	}
+
+	dispatcher := client.Dispatcher
+
+	dispatcher.AddHandler(handlers.NewCommand("q", func(ctx *ext.Context, update *ext.Update) error {
+		go func() {
+			if err := tgbot.HandleQuote(ctx, update); err != nil {
+				log.Printf("quote error: %v", err)
+			}
+		}()
 		return nil
-	}, th.CommandEqual("start"))
-	bh.Handle(func(ctx *th.Context, update telego.Update) error {
-		tgbot.GenerateQuote(ctx, update)
-		return nil
-	}, th.CommandEqual("q"))
+	}))
 
-	_ = bh.Start()
+	dispatcher.AddHandler(handlers.NewCommand("start", func(ctx *ext.Context, u *ext.Update) error {
+		chatID := u.EffectiveChat().GetID()
+		_, err := ctx.SendMessage(chatID, &tg.MessagesSendMessageRequest{
+			Message: `
+Вас вітає бот літописець для створення цитат (стікерів) з повідомлень.
+Напишіть /q для створення цитати.
+`,
+		})
+		if err != nil {
+			log.Printf("Помилка надсилання повідомлення: %v", err)
+			return err
+		}
+		return nil
+	}))
+
+	fmt.Printf("Bot (@%s) started...\n", client.Self.Username)
+	client.Idle()
 }
