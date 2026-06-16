@@ -65,7 +65,7 @@ func BuildQuoteBubble(p QuoteParams, s Sizes) (*Node, error) {
 		replyTextMaxWidth := maxContentWidth - s.ReplyLineWidth - s.ReplyLineGap
 		replySegs := []TextSegment{
 			{Text: p.Reply.AuthorName + "\n", Bold: true, Color: nameColorFromID(p.Reply.AuthorID)},
-			{Text: p.Reply.Text, Color: color.RGBA{120, 120, 120, 255}},
+			{Text: p.Reply.Text, Color: replyTextColor},
 		}
 		replyImg, _, replyH, err := RenderRichText(replySegs, replyTextMaxWidth, s.ReplyFontSize, notoSansFamily, notoMonoFamily)
 		if err != nil {
