@@ -8,6 +8,7 @@ import (
 
 	"github.com/Geergon/Chronicler-tg-bot/internal/render"
 	"github.com/Geergon/Chronicler-tg-bot/internal/tgbot"
+	"github.com/joho/godotenv"
 	"github.com/mymmrac/telego"
 	th "github.com/mymmrac/telego/telegohandler"
 	tu "github.com/mymmrac/telego/telegoutil"
@@ -34,13 +35,21 @@ func init() {
 		Compress:   true,
 	})
 	log.SetOutput(logFile)
+
+	if err := godotenv.Load(); err != nil {
+		log.Print("No .env file found")
+	}
 }
 
 func main() {
 	if err := render.InitFonts(); err != nil {
 		log.Fatal("render init fonts:", err)
 	}
-	botToken := os.Getenv("TOKEN")
+
+	botToken, exist := os.LookupEnv("TOKEN")
+	if !exist {
+		log.Fatal("invalid bot token")
+	}
 
 	bot, err := telego.NewBot(botToken)
 	if err != nil {
