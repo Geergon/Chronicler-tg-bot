@@ -27,18 +27,19 @@ func GenerateQuote(ctx context.Context, update telego.Update) error {
 	// 	userLastName = update.Message.From.LastName
 	// }
 
-	text := update.Message.Text
-	if update.Message.Quote != nil {
-		text = update.Message.Quote.Text
-	}
+	// text := update.Message.Text
+	// if update.Message.Quote != nil {
+	// 	text = update.Message.Quote.Text
+	// }
 
 	// var replyText string
 	var replySenderID int64
 	var replySenderFirstName string
 	var replySenderLastName string
+	var replyText string
 	// var replyMessageQuote string
 	if update.Message.ReplyToMessage != nil {
-		replyText := update.Message.ReplyToMessage.Text
+		replyText = update.Message.ReplyToMessage.Text
 		fmt.Printf("Reply Text: %s\n", replyText)
 
 		if update.Message.ReplyToMessage.From != nil {
@@ -72,7 +73,7 @@ func GenerateQuote(ctx context.Context, update telego.Update) error {
 			BubbleColor: color.RGBA{45, 40, 60, 255},
 			// Media: []image.Image{media1, media2},
 			Segments: []render.TextSegment{
-				{Text: text, Color: color.RGBA{255, 255, 255, 255}},
+				{Text: replyText, Color: color.RGBA{255, 255, 255, 255}},
 			},
 		},
 	}
