@@ -152,3 +152,36 @@ func getHistory(ctx *ext.Context, chatID int64, msgID int, limit int) ([]*tg.Mes
 
 	return messages, userMap, nil
 }
+
+func resolveForwardAuthorFull(
+	fwd *tg.MessageFwdHeader,
+	userMap map[int64]*tg.User,
+	chatMap map[int64]string,
+) (id int64, name string) {
+	if fwd == nil {
+		return 0, ""
+	}
+
+	if fwd.FromName != "" {
+		return 0, fwd.FromName
+	}
+
+	switch peer := fwd.FromID.(type) {
+	case *tg.PeerUser:
+		id = peer.UserID
+		if u, ok := userMap[peer.UserID]; ok {
+			name = u.FirstName
+			if u.LastName != "" {
+				name += " " + u.LastName
+			}
+		}
+
+	case *tg.PeerChannel:
+		id = peer.ChannelID
+		if title, ok := chatMap[peer.ChannelID]; ok {
+			name = title
+		}
+	}
+
+	return id, name
+}

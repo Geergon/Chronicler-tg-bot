@@ -1,12 +1,86 @@
 package tgbot
 
 import (
+	"fmt"
 	"image"
 	"log"
+	"sort"
 
 	"github.com/celestix/gotgproto/ext"
 	"github.com/gotd/td/tg"
 )
+
+func fetchMediaGroup(ctx *ext.Context, chatID int64, msg *tg.Message) ([]image.Image, error) {
+	if msg.GroupedID == 0 {
+		return fetchMedia(ctx, msg)
+	}
+
+	const searchRange = 9
+	ids := make([]tg.InputMessageClass, 0, searchRange*2+1)
+	for i := msg.ID - searchRange; i <= msg.ID+searchRange; i++ {
+		if i > 0 {
+			ids = append(ids, &tg.InputMessageID{ID: i})
+		}
+	}
+
+	inputPeer := ctx.PeerStorage.GetInputPeerById(chatID)
+	var msgClass tg.MessagesMessagesClass
+	var err error
+
+	switch peer := inputPeer.(type) {
+	case *tg.InputPeerChannel:
+		msgClass, err = ctx.Raw.ChannelsGetMessages(ctx, &tg.ChannelsGetMessagesRequest{
+			Channel: &tg.InputChannel{
+				ChannelID:  peer.ChannelID,
+				AccessHash: peer.AccessHash,
+			},
+			ID: ids,
+		})
+	default:
+		msgClass, err = ctx.Raw.MessagesGetMessages(ctx, ids)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("fetchMediaGroup: %w", err)
+	}
+
+	var rawMessages []tg.MessageClass
+	switch r := msgClass.(type) {
+	case *tg.MessagesChannelMessages:
+		rawMessages = r.Messages
+	case *tg.MessagesMessages:
+		rawMessages = r.Messages
+	case *tg.MessagesMessagesSlice:
+		rawMessages = r.Messages
+	}
+
+	var groupMsgs []*tg.Message
+	for _, m := range rawMessages {
+		gm, ok := m.(*tg.Message)
+		if !ok {
+			continue
+		}
+		if gm.GroupedID == msg.GroupedID {
+			groupMsgs = append(groupMsgs, gm)
+		}
+	}
+
+	sort.Slice(groupMsgs, func(i, j int) bool {
+		return groupMsgs[i].ID < groupMsgs[j].ID
+	})
+
+	var images []image.Image
+	for _, gm := range groupMsgs {
+		imgs, err := fetchMedia(ctx, gm)
+		if err != nil {
+			log.Printf("fetchMediaGroup: skip msg %d: %v", gm.ID, err)
+			continue
+		}
+		images = append(images, imgs...)
+	}
+
+	return images, nil
+}
 
 func fetchMedia(ctx *ext.Context, msg *tg.Message) ([]image.Image, error) {
 	if msg.Media == nil {
@@ -75,14 +149,3 @@ func pickBestPhotoSize(sizes []tg.PhotoSizeClass) *tg.PhotoSize {
 	}
 	return nil
 }
-
-// func refreshAndFetchMedia(ctx *ext.Context, chatID int64, msg *tg.Message) ([]image.Image, error) {
-// 	// Робимо свіжий запит до API, щоб Telegram дав актуальний FileReference
-// 	refreshedMsg, _, err := fetchMessage(ctx, chatID, msg.ID) // ваша функція з попереднього кроку
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to refresh message for media: %w", err)
-// 	}
-//
-// 	// Тепер викликаємо ваш fetchMedia, але передаємо туди ОНОВЛЕНЕ повідомлення
-// 	return fetchMedia(ctx, refreshedMsg)
-// }

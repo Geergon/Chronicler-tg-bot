@@ -49,7 +49,7 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 		return nil, err
 	}
 
-	media, err := fetchMedia(ctx, replyMsg)
+	media, err := fetchMediaGroup(ctx, chatID, replyMsg)
 	if err != nil || replyMsg == nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int,
 		return a
 	}
 
-	media, err := fetchMedia(ctx, replyMsg)
+	media, err := fetchMediaGroup(ctx, chatID, replyMsg)
 	if err != nil || replyMsg == nil {
 		return nil, err
 	}
