@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"image/color"
 	"log"
+	"strconv"
+	"strings"
 
 	"github.com/Geergon/Chronicler-tg-bot/internal/render"
 	"github.com/celestix/gotgproto/ext"
@@ -24,42 +26,6 @@ type QuoteData struct {
 }
 
 func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteData, error) {
-	inputPeer := ctx.PeerStorage.GetInputPeerById(chatID)
-	ch, ok := inputPeer.(*tg.InputPeerChannel)
-	if !ok {
-		return nil, fmt.Errorf("unsupported peer type")
-	}
-
-	fetch := func(msgID int) (*tg.Message, map[int64]*tg.User, error) {
-		result, err := ctx.Raw.ChannelsGetMessages(ctx, &tg.ChannelsGetMessagesRequest{
-			Channel: &tg.InputChannel{
-				ChannelID:  ch.ChannelID,
-				AccessHash: ch.AccessHash,
-			},
-			ID: []tg.InputMessageClass{&tg.InputMessageID{ID: msgID}},
-		})
-		if err != nil {
-			log.Printf("failed to get messages: %v", err)
-			return nil, nil, err
-		}
-		msgs, ok := result.(*tg.MessagesChannelMessages)
-		if !ok || len(msgs.Messages) == 0 {
-			return nil, nil, nil
-		}
-		msg, ok := msgs.Messages[0].(*tg.Message)
-		if !ok {
-			return nil, nil, nil
-		}
-
-		userMap := make(map[int64]*tg.User)
-		for _, u := range msgs.Users {
-			if user, ok := u.(*tg.User); ok {
-				userMap[user.ID] = user
-			}
-		}
-		return msg, userMap, nil
-	}
-
 	resolveAuthor := func(msg *tg.Message, userMap map[int64]*tg.User) MessageAuthor {
 		peer, ok := msg.FromID.(*tg.PeerUser)
 		if !ok {
@@ -74,7 +40,7 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 		return a
 	}
 
-	replyMsg, replyUsers, err := fetch(replyToMsgID)
+	replyMsg, replyUsers, err := fetchMessage(ctx, chatID, replyToMsgID)
 	if err != nil || replyMsg == nil {
 		return nil, err
 	}
@@ -86,7 +52,45 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 
 	innerReply, ok := replyMsg.ReplyTo.(*tg.MessageReplyHeader)
 	if ok && innerReply != nil && innerReply.ReplyToMsgID != 0 {
-		innerMsg, innerUsers, err := fetch(innerReply.ReplyToMsgID)
+		innerMsg, innerUsers, err := fetchMessage(ctx, chatID, innerReply.ReplyToMsgID)
+		if err == nil && innerMsg != nil {
+			text := innerMsg.Message
+			if innerReply.Quote && innerReply.QuoteText != "" {
+				text = innerReply.QuoteText
+			}
+			result.ReplyTo = &QuoteData{
+				Author: resolveAuthor(innerMsg, innerUsers),
+				Text:   text,
+			}
+		}
+	}
+
+	return result, nil
+}
+
+func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int, replyMsg *tg.Message, replyUsers map[int64]*tg.User) (*QuoteData, error) {
+	resolveAuthor := func(msg *tg.Message, userMap map[int64]*tg.User) MessageAuthor {
+		peer, ok := msg.FromID.(*tg.PeerUser)
+		if !ok {
+			return MessageAuthor{}
+		}
+		a := MessageAuthor{ID: peer.UserID}
+		if u, ok := userMap[peer.UserID]; ok {
+			a.FirstName = u.FirstName
+			a.Username = u.Username
+			a.IsBot = u.Bot
+		}
+		return a
+	}
+
+	result := &QuoteData{
+		Author: resolveAuthor(replyMsg, replyUsers),
+		Text:   replyMsg.Message,
+	}
+
+	innerReply, ok := replyMsg.ReplyTo.(*tg.MessageReplyHeader)
+	if ok && innerReply != nil && innerReply.ReplyToMsgID != 0 {
+		innerMsg, innerUsers, err := fetchMessage(ctx, chatID, innerReply.ReplyToMsgID)
 		if err == nil && innerMsg != nil {
 			text := innerMsg.Message
 			if innerReply.Quote && innerReply.QuoteText != "" {
@@ -116,52 +120,258 @@ func HandleQuote(ctx *ext.Context, update *ext.Update) error {
 
 	chatID := update.EffectiveChat().GetID()
 
-	quoteData, err := extractQuoteData(ctx, chatID, replyHeader.ReplyToMsgID)
-	if err != nil {
-		return fmt.Errorf("extractQuoteData: %w", err)
+	args := strings.Fields(update.EffectiveMessage.Text)
+
+	if len(args) == 1 {
+
+		quoteData, err := extractQuoteData(ctx, chatID, replyHeader.ReplyToMsgID)
+		if err != nil {
+			return fmt.Errorf("extractQuoteData: %w", err)
+		}
+		if quoteData == nil {
+			return fmt.Errorf("extractQuoteData: %w", err)
+		}
+
+		var replyInfo *render.ReplyInfo
+		if quoteData.ReplyTo != nil {
+			replyInfo = &render.ReplyInfo{
+				AuthorID:   quoteData.ReplyTo.Author.ID,
+				AuthorName: quoteData.ReplyTo.Author.FirstName,
+				Text:       quoteData.ReplyTo.Text,
+			}
+		}
+
+		// quoted text instead of actual text if user quoted part of the text in the /q command
+		text := quoteData.Text
+		if replyHeader.Quote && replyHeader.QuoteText != "" {
+			text = replyHeader.QuoteText
+		}
+
+		messages := []render.ChatMessage{
+			{
+				AuthorID:    quoteData.Author.ID,
+				AuthorName:  quoteData.Author.FirstName,
+				Reply:       replyInfo,
+				BubbleColor: color.RGBA{45, 40, 60, 255},
+				Segments: []render.TextSegment{
+					{Text: text, Color: color.RGBA{255, 255, 255, 255}},
+				},
+			},
+		}
+
+		sticker, err := render.BuildStickerChatStack(messages)
+		if err != nil {
+			return fmt.Errorf("BuildStickerChatStack: %w", err)
+		}
+
+		if err := render.SavePNG("out_chat_stack.png", sticker.Image()); err != nil {
+			log.Fatal("save:", err)
+		}
+
+		// // TODO: відправити sticker як документ/стікер в чат
+		// _ = sticker
+
+		return nil
+	} else if len(args) == 2 {
+		numberString := args[1]
+		number, err := strconv.Atoi(numberString)
+		if err != nil {
+			log.Printf("failed to format string to int: %v", err)
+			return err
+		}
+
+		messages, err := handleMessageStack(ctx, chatID, replyHeader.ReplyToMsgID, number, replyHeader)
+		if err != nil {
+			log.Printf("failed to handle messages stack: %v", err)
+			return err
+		}
+
+		sticker, err := render.BuildStickerChatStack(messages)
+		if err != nil {
+			return fmt.Errorf("BuildStickerChatStack: %w", err)
+		}
+
+		if err := render.SavePNG("out_chat_stack.png", sticker.Image()); err != nil {
+			log.Fatal("save:", err)
+		}
+
+	} else {
+		log.Println("too many arguments in /q command")
+		return nil
 	}
-	if quoteData == nil {
-		return fmt.Errorf("extractQuoteData: %w", err)
+	return nil
+}
+
+func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number int, replyHeader *tg.MessageReplyHeader) ([]render.ChatMessage, error) {
+	if number == 0 {
+		return nil, fmt.Errorf("number is 0")
+	}
+	replyMsg, replyUsers, err := getHistory(ctx, chatID, replyToMsgID, number)
+	if err != nil {
+		log.Printf("failed to get messages history: %v", err)
+		return nil, err
 	}
 
-	var replyInfo *render.ReplyInfo
-	if quoteData.ReplyTo != nil {
-		replyInfo = &render.ReplyInfo{
-			AuthorID:   quoteData.ReplyTo.Author.ID,
-			AuthorName: quoteData.ReplyTo.Author.FirstName,
-			Text:       quoteData.ReplyTo.Text,
+	var messages []render.ChatMessage
+	for i := 0; i < number; i++ {
+		quoteData, err := extractQuoteDataFromStack(ctx, chatID, replyToMsgID+i, replyMsg, replyUsers)
+		if err != nil {
+			return nil, fmt.Errorf("extractQuoteData: %w", err)
+		}
+		if quoteData == nil {
+			return nil, fmt.Errorf("extractQuoteData: %w", err)
+		}
+
+		var replyInfo *render.ReplyInfo
+		if quoteData.ReplyTo != nil {
+			replyInfo = &render.ReplyInfo{
+				AuthorID:   quoteData.ReplyTo.Author.ID,
+				AuthorName: quoteData.ReplyTo.Author.FirstName,
+				Text:       quoteData.ReplyTo.Text,
+			}
+		}
+
+		// quoted text instead of actual text if user quoted part of the text in the /q command
+		text := quoteData.Text
+		if replyHeader.Quote && replyHeader.QuoteText != "" {
+			text = replyHeader.QuoteText
+		}
+
+		message := []render.ChatMessage{
+			{
+				AuthorID:    quoteData.Author.ID,
+				AuthorName:  quoteData.Author.FirstName,
+				Reply:       replyInfo,
+				BubbleColor: color.RGBA{45, 40, 60, 255},
+				Segments: []render.TextSegment{
+					{Text: text, Color: color.RGBA{255, 255, 255, 255}},
+				},
+			},
+		}
+		messages = append(messages, message...)
+	}
+	return messages, nil
+}
+
+func getHistory(ctx *ext.Context, chatID int64, msgID int, limit int) (*tg.Message, map[int64]*tg.User, error) {
+	inputPeer := ctx.PeerStorage.GetInputPeerById(chatID)
+
+	var msgClass tg.MessagesMessagesClass
+	var err error
+
+	if limit >= 6 {
+		return nil, nil, fmt.Errorf("limit is too high: %d", limit)
+	}
+
+	switch peer := inputPeer.(type) {
+	case *tg.InputPeerChannel, *tg.InputPeerUser, *tg.InputPeerChat, *tg.InputPeerSelf:
+		msgClass, err = ctx.Raw.MessagesGetHistory(ctx, &tg.MessagesGetHistoryRequest{
+			Peer:      peer,
+			OffsetID:  msgID,
+			AddOffset: -limit,
+			Limit:     limit,
+		})
+	default:
+		return nil, nil, fmt.Errorf("unsupported peer type: %T", inputPeer)
+	}
+
+	if err != nil {
+		log.Printf("failed to get messages: %v", err)
+		return nil, nil, err
+	}
+	var messages []tg.MessageClass
+	var users []tg.UserClass
+
+	switch r := msgClass.(type) {
+	case *tg.MessagesChannelMessages:
+		messages = r.Messages
+		users = r.Users
+	case *tg.MessagesMessages:
+		messages = r.Messages
+		users = r.Users
+	case *tg.MessagesMessagesSlice:
+		messages = r.Messages
+		users = r.Users
+	default:
+		return nil, nil, fmt.Errorf("unknown messages response type: %T", msgClass)
+	}
+
+	if len(messages) == 0 {
+		return nil, nil, nil
+	}
+
+	msg, ok := messages[0].(*tg.Message)
+	if !ok {
+		return nil, nil, nil
+	}
+
+	userMap := make(map[int64]*tg.User)
+	for _, u := range users {
+		if user, ok := u.(*tg.User); ok {
+			userMap[user.ID] = user
 		}
 	}
+	return msg, userMap, nil
+}
 
-	// quoted text instead of actual text if user quoted part of the text in the /q command
-	text := quoteData.Text
-	if replyHeader.Quote && replyHeader.QuoteText != "" {
-		text = replyHeader.QuoteText
-	}
+func fetchMessage(ctx *ext.Context, chatID int64, msgID int) (*tg.Message, map[int64]*tg.User, error) {
+	inputPeer := ctx.PeerStorage.GetInputPeerById(chatID)
+	var msgClass tg.MessagesMessagesClass
+	var err error
 
-	messages := []render.ChatMessage{
-		{
-			AuthorID:    quoteData.Author.ID,
-			AuthorName:  quoteData.Author.FirstName,
-			Reply:       replyInfo,
-			BubbleColor: color.RGBA{45, 40, 60, 255},
-			Segments: []render.TextSegment{
-				{Text: text, Color: color.RGBA{255, 255, 255, 255}},
+	switch peer := inputPeer.(type) {
+	case *tg.InputPeerChannel:
+		msgClass, err = ctx.Raw.ChannelsGetMessages(ctx, &tg.ChannelsGetMessagesRequest{
+			Channel: &tg.InputChannel{
+				ChannelID:  peer.ChannelID,
+				AccessHash: peer.AccessHash,
 			},
-		},
+			ID: []tg.InputMessageClass{&tg.InputMessageID{ID: msgID}},
+		})
+	case *tg.InputPeerUser, *tg.InputPeerChat, *tg.InputPeerSelf:
+		msgClass, err = ctx.Raw.MessagesGetMessages(ctx, []tg.InputMessageClass{
+			&tg.InputMessageID{ID: msgID},
+		})
+	default:
+		return nil, nil, fmt.Errorf("unsupported peer type: %T", inputPeer)
 	}
 
-	sticker, err := render.BuildStickerChatStack(messages)
 	if err != nil {
-		return fmt.Errorf("BuildStickerChatStack: %w", err)
+		log.Printf("failed to get messages: %v", err)
+		return nil, nil, err
 	}
 
-	if err := render.SavePNG("out_chat_stack.png", sticker.Image()); err != nil {
-		log.Fatal("save:", err)
+	var messages []tg.MessageClass
+	var users []tg.UserClass
+
+	switch r := msgClass.(type) {
+	case *tg.MessagesChannelMessages:
+		messages = r.Messages
+		users = r.Users
+	case *tg.MessagesMessages:
+		messages = r.Messages
+		users = r.Users
+	case *tg.MessagesMessagesSlice:
+		messages = r.Messages
+		users = r.Users
+	default:
+		return nil, nil, fmt.Errorf("unknown messages response type: %T", msgClass)
 	}
 
-	// // TODO: відправити sticker як документ/стікер в чат
-	// _ = sticker
+	if len(messages) == 0 {
+		return nil, nil, nil
+	}
 
-	return nil
+	msg, ok := messages[0].(*tg.Message)
+	if !ok {
+		return nil, nil, nil
+	}
+
+	userMap := make(map[int64]*tg.User)
+	for _, u := range users {
+		if user, ok := u.(*tg.User); ok {
+			userMap[user.ID] = user
+		}
+	}
+	return msg, userMap, nil
 }
