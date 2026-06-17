@@ -2,12 +2,15 @@ package tgbot
 
 import (
 	"fmt"
+	"image"
 	"image/color"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/Geergon/Chronicler-tg-bot/internal/render"
+	"github.com/HugoSmits86/nativewebp"
 	"github.com/celestix/gotgproto/ext"
 	"github.com/gotd/td/tg"
 )
@@ -22,6 +25,7 @@ type MessageAuthor struct {
 type QuoteData struct {
 	Author  MessageAuthor
 	Text    string
+	Media   []image.Image
 	ReplyTo *QuoteData
 }
 
@@ -45,9 +49,15 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 		return nil, err
 	}
 
+	media, err := fetchMedia(ctx, replyMsg)
+	if err != nil || replyMsg == nil {
+		return nil, err
+	}
+
 	result := &QuoteData{
 		Author: resolveAuthor(replyMsg, replyUsers),
 		Text:   replyMsg.Message,
+		Media:  media,
 	}
 
 	innerReply, ok := replyMsg.ReplyTo.(*tg.MessageReplyHeader)
@@ -83,9 +93,15 @@ func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int,
 		return a
 	}
 
+	media, err := fetchMedia(ctx, replyMsg)
+	if err != nil || replyMsg == nil {
+		return nil, err
+	}
+
 	result := &QuoteData{
 		Author: resolveAuthor(replyMsg, replyUsers),
 		Text:   replyMsg.Message,
+		Media:  media,
 	}
 
 	innerReply, ok := replyMsg.ReplyTo.(*tg.MessageReplyHeader)
@@ -159,6 +175,7 @@ func HandleQuote(ctx *ext.Context, update *ext.Update) error {
 				Reply:       replyInfo,
 				AvatarImg:   avatar,
 				BubbleColor: color.RGBA{45, 40, 60, 255},
+				Media:       quoteData.Media,
 				Segments: []render.TextSegment{
 					{Text: text, Color: color.RGBA{255, 255, 255, 255}},
 				},
@@ -170,8 +187,16 @@ func HandleQuote(ctx *ext.Context, update *ext.Update) error {
 			return fmt.Errorf("BuildStickerChatStack: %w", err)
 		}
 
-		if err := render.SavePNG("out_chat_stack.png", sticker.Image()); err != nil {
-			log.Fatal("save:", err)
+		stickerFileName := "out.webp"
+		file, err := os.Create(stickerFileName)
+		if err != nil {
+			log.Fatalf("Error creating file %s: %v", stickerFileName, err)
+		}
+		defer file.Close()
+
+		err = nativewebp.Encode(file, sticker.Image(), nil)
+		if err != nil {
+			log.Fatalf("Error encoding image to WebP: %v", err)
 		}
 
 		// // TODO: відправити sticker як документ/стікер в чат
@@ -254,6 +279,7 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 			AvatarImg:   avatar,
 			Reply:       replyInfo,
 			BubbleColor: color.RGBA{45, 40, 60, 255},
+			Media:       quoteData.Media,
 			Segments: []render.TextSegment{
 				{Text: text, Color: color.RGBA{255, 255, 255, 255}},
 			},

@@ -72,6 +72,13 @@ func fetchMessage(ctx *ext.Context, chatID int64, msgID int) (*tg.Message, map[i
 
 func getHistory(ctx *ext.Context, chatID int64, msgID int, limit int) ([]*tg.Message, map[int64]*tg.User, error) {
 	if limit <= 0 || limit > 6 {
+		_, err := ctx.SendMessage(chatID, &tg.MessagesSendMessageRequest{
+			Message: "Вказана завелика кількість повідомлень для збереження. Максимальний ліміт це 6",
+		})
+		if err != nil {
+			log.Println("failed to send message: ", err)
+		}
+
 		return nil, nil, fmt.Errorf("invalid limit: %d", limit)
 	}
 

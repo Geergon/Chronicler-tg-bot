@@ -9,6 +9,7 @@ require (
 
 require (
 	github.com/AnimeKaizoku/cacher v1.0.3-0.20250508132714-ddc7471efeef // indirect
+	github.com/HugoSmits86/nativewebp v1.3.0 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.15.2 // indirect
 	github.com/bytedance/sonic/loader v0.5.1 // indirect

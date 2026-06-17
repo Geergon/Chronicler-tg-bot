@@ -47,11 +47,11 @@ func fetchUserAvatar(ctx *ext.Context, userID int64) (image.Image, error) {
 
 	// log.Printf("fetchUserAvatar: photo ID=%d sizes=%d", photo.ID, len(photo.Sizes))
 
-	for _, s := range photo.Sizes {
-		log.Printf("  size type=%T %+v", s, s)
-	}
+	// for _, s := range photo.Sizes {
+	// 	log.Printf("  size type=%T %+v", s, s)
+	// }
 
-	bestSize := pickBestPhotoSize(photo.Sizes)
+	bestSize := pickBestAvatarSize(photo.Sizes)
 	if bestSize == nil {
 		log.Printf("fetchUserAvatar: no suitable size found")
 		return nil, nil
@@ -82,7 +82,7 @@ func toInputUser(peer tg.InputPeerClass) (tg.InputUserClass, bool) {
 	return nil, false
 }
 
-func pickBestPhotoSize(sizes []tg.PhotoSizeClass) *tg.PhotoSize {
+func pickBestAvatarSize(sizes []tg.PhotoSizeClass) *tg.PhotoSize {
 	preferred := []string{"a", "b", "c"}
 	sizeMap := make(map[string]*tg.PhotoSize)
 	for _, s := range sizes {
@@ -90,12 +90,11 @@ func pickBestPhotoSize(sizes []tg.PhotoSizeClass) *tg.PhotoSize {
 		case *tg.PhotoSize:
 			sizeMap[ps.Type] = ps
 		case *tg.PhotoSizeProgressive:
-			// конвертуємо в PhotoSize для сумісності
 			sizeMap[ps.Type] = &tg.PhotoSize{
 				Type: ps.Type,
 				W:    ps.W,
 				H:    ps.H,
-				Size: ps.Sizes[len(ps.Sizes)-1], // беремо найбільший варіант
+				Size: ps.Sizes[len(ps.Sizes)-1],
 			}
 		}
 	}
