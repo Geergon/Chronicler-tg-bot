@@ -91,12 +91,12 @@ func tokenizeSegments(segments []TextSegment, fontSize float64, family, monoFami
 		if seg.Italic {
 			style |= canvas.FontItalic
 		}
-		f := family
+		baseFamily := family
 		if seg.Mono {
-			f = monoFamily
+			baseFamily = monoFamily
 		}
-		face := f.Face(fontSize, seg.Color, style)
-		distinctFace := family.Face(fontSize, seg.Color, style)
+
+		fallbackFace := baseFamily.Face(fontSize, seg.Color, style)
 
 		var found []gomoji.Emoji
 		marked := gomoji.ReplaceEmojisWithFunc(seg.Text, func(e gomoji.Emoji) string {
@@ -111,11 +111,35 @@ func tokenizeSegments(segments []TextSegment, fontSize float64, family, monoFami
 					tokens = append(tokens, token{emojiImg: img})
 					continue
 				}
-				tokens = append(tokens, token{text: e.Character, face: distinctFace})
+				tokens = append(tokens, token{text: e.Character, face: fallbackFace})
 				continue
 			}
-			if part.text != "" {
-				tokens = append(tokens, token{text: part.text, face: face})
+
+			if part.text == "" {
+				continue
+			}
+
+			runes := []rune(part.text)
+			groupStart := 0
+			currentFamily, currentScale := familyForRune(runes[0], baseFamily)
+
+			for i := 1; i <= len(runes); i++ {
+				var nextFamily *canvas.FontFamily
+				var nextScale float64
+				if i < len(runes) {
+					nextFamily, nextScale = familyForRune(runes[i], baseFamily)
+				}
+
+				if i == len(runes) || nextFamily != currentFamily {
+					chunk := string(runes[groupStart:i])
+					face := currentFamily.Face(fontSize*currentScale, seg.Color, style)
+					tokens = append(tokens, token{text: chunk, face: face})
+					groupStart = i
+					if i < len(runes) {
+						currentFamily = nextFamily
+						currentScale = nextScale
+					}
+				}
 			}
 		}
 	}
@@ -193,6 +217,16 @@ func InitFonts() error {
 	notoMonoFamily = canvas.NewFontFamily("noto-mono")
 	if err := notoMonoFamily.LoadFontFile("./fonts/NotoSansMono-Regular.ttf", canvas.FontRegular); err != nil {
 		return err
+	}
+
+	cuneiformFamily = canvas.NewFontFamily("noto-cuneiform")
+	if err := cuneiformFamily.LoadFontFile("./fonts/NotoSansCuneiform-Regular.ttf", canvas.FontRegular); err != nil {
+		return fmt.Errorf("failed to load cuneiform font: %w", err)
+	}
+
+	cjkFamily = canvas.NewFontFamily("noto-cjk")
+	if err := cjkFamily.LoadFontFile("./fonts/NotoSansCJKjp-Regular.otf", canvas.FontRegular); err != nil {
+		return fmt.Errorf("failed to load CJK font: %w", err)
 	}
 
 	return nil
@@ -290,4 +324,29 @@ func shrinkWrapText(rtFactory func() *canvas.RichText, maxWidth float64) *canvas
 	}
 
 	return build(math.Ceil(hi))
+}
+
+func isCuneiform(r rune) bool {
+	return r >= 0x12000 && r <= 0x123FF
+}
+
+func isCJK(r rune) bool {
+	return (r >= 0x4E00 && r <= 0x9FFF) || // CJK Unified Ideographs
+		(r >= 0x3400 && r <= 0x4DBF) || // CJK Extension A
+		(r >= 0x20000 && r <= 0x2A6DF) || // CJK Extension B
+		(r >= 0x3040 && r <= 0x309F) || // Hiragana
+		(r >= 0x30A0 && r <= 0x30FF) || // Katakana
+		(r >= 0xAC00 && r <= 0xD7AF) || // Hangul
+		(r >= 0x3000 && r <= 0x303F) // CJK Symbols and Punctuation
+}
+
+func familyForRune(r rune, defaultFamily *canvas.FontFamily) (*canvas.FontFamily, float64) {
+	switch {
+	case isCuneiform(r):
+		return cuneiformFamily, 0.7
+	case isCJK(r):
+		return cjkFamily, 1.0
+	default:
+		return defaultFamily, 1.0
+	}
 }

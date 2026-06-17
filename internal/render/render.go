@@ -13,9 +13,10 @@ import (
 )
 
 var (
-	notoSansFamily *canvas.FontFamily
-	notoMonoFamily *canvas.FontFamily
-	emojiFamily    *canvas.FontFamily
+	notoSansFamily  *canvas.FontFamily
+	notoMonoFamily  *canvas.FontFamily
+	cuneiformFamily *canvas.FontFamily
+	cjkFamily       *canvas.FontFamily
 )
 
 const (
