@@ -2,10 +2,14 @@ package render
 
 import (
 	"fmt"
+	"image"
 	"image/color"
+	"math"
 	"strings"
 
 	"git.sr.ht/~sbinet/gg"
+	"github.com/tdewolff/canvas"
+	"github.com/tdewolff/canvas/renderers/rasterizer"
 )
 
 func initials(name string) string {
@@ -54,19 +58,59 @@ func avatarImageLetters(letters string, color1, color2 color.Color, size int) (*
 	dc.Fill()
 
 	letterCount := len([]rune(letters))
-	var fontSize float64
+
+	// Target text size relative to avatar
+	var targetRatio float64
 	if letterCount > 1 {
-		fontSize = float64(size) * 0.38
+		targetRatio = 0.5 // the text takes 50% of the avatar height
 	} else {
-		fontSize = float64(size) * 0.48
+		targetRatio = 0.6 // 60% for one letter
+	}
+	targetH := float64(size) * targetRatio
+
+	// Render with a large fontSize to avoid losing quality when scaling
+	fontSize := float64(size) * 0.8
+	img, w, h, err := renderAvatarText(letters, fontSize, float64(size))
+	if err != nil {
+		return nil, fmt.Errorf("avatarImageLetters: %w", err)
 	}
 
-	if err := dc.LoadFontFace("./fonts/NotoSans-Bold.ttf", fontSize); err != nil {
-		return nil, fmt.Errorf("load font for avatar: %w", err)
+	if w <= 0 || h <= 0 {
+		return dc, nil
 	}
 
-	dc.SetColor(color.White)
-	dc.DrawStringAnchored(letters, float64(size)/2, float64(size)/2, 0.5, 0.5)
+	// Scale to targetH while preserving proportions
+	scale := targetH / h
+	newW := int(math.Round(w * scale))
+	newH := int(math.Round(h * scale))
+
+	scaled := resizeImage(img, newW, newH)
+
+	// Center on canvas
+	x := (size - newW) / 2
+	y := (size - newH) / 2
+	dc.DrawImage(scaled, x, y)
 
 	return dc, nil
+}
+
+func renderAvatarText(letters string, fontSize float64, maxSize float64) (image.Image, float64, float64, error) {
+	segments := []TextSegment{{Text: letters, Color: color.White, Bold: true}}
+	tokens := tokenizeSegments(segments, fontSize, notoSansFamily, notoMonoFamily)
+	rtFactory := buildRichTextFromTokens(tokens, fontSize)
+
+	text := rtFactory().ToText(maxSize, 0, canvas.Center, canvas.Top, nil)
+	bounds := text.Bounds()
+	w, h := bounds.W(), bounds.H()
+
+	if w <= 0 || h <= 0 {
+		return image.NewRGBA(image.Rect(0, 0, 1, 1)), 0, 0, nil
+	}
+
+	c := canvas.New(w, h)
+	ctx := canvas.NewContext(c)
+	ctx.DrawText(-bounds.X0, -bounds.Y0, text)
+
+	img := rasterizer.Draw(c, canvas.DPMM(1.0), canvas.DefaultColorSpace)
+	return img, w, h, nil
 }
