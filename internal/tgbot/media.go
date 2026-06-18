@@ -127,7 +127,8 @@ func fetchMedia(ctx *ext.Context, msg *tg.Message) ([]image.Image, error) {
 }
 
 func pickBestPhotoSize(sizes []tg.PhotoSizeClass) *tg.PhotoSize {
-	preferred := []string{"m", "x"}
+	// preferred := []string{"m", "x"}
+	preferred := []string{"x"}
 	sizeMap := make(map[string]*tg.PhotoSize)
 	for _, s := range sizes {
 		switch ps := s.(type) {
