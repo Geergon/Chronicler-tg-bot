@@ -277,15 +277,20 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 	if number == 0 {
 		return nil, fmt.Errorf("number is 0")
 	}
-	messagesStack, users, err := getHistory(ctx, chatID, replyToMsgID, number)
+	groups, users, err := getMessageRange(ctx, chatID, replyToMsgID, number)
 	if err != nil {
-		log.Printf("failed to get messages history: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("getMessageRange: %w", err)
+	}
+	if len(groups) == 0 {
+		return nil, fmt.Errorf("no messages found")
 	}
 
 	var chatMessages []render.ChatMessage
-	for i, msg := range messagesStack {
-		quoteData, err := extractQuoteDataFromStack(ctx, chatID, msg.ID, msg, users)
+
+	for i, group := range groups {
+		mainMsg := group.Messages[0]
+
+		quoteData, err := extractQuoteDataFromStack(ctx, chatID, mainMsg.ID, mainMsg, users)
 		if err != nil {
 			return nil, fmt.Errorf("extractQuoteData: %w", err)
 		}
@@ -308,6 +313,16 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 			text = replyHeader.QuoteText
 		}
 
+		var media []image.Image
+		for _, msg := range group.Messages {
+			imgs, err := fetchMedia(ctx, msg)
+			if err != nil {
+				log.Printf("fetchMedia for msg %d: %v", msg.ID, err)
+				continue
+			}
+			media = append(media, imgs...)
+		}
+
 		avatar, err := fetchAvatar(ctx, quoteData.Author.ID)
 		if err != nil {
 			log.Printf("fetchAvatar: %v", err)
@@ -319,7 +334,7 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 			AvatarImg:   avatar,
 			Reply:       replyInfo,
 			BubbleColor: color.RGBA{45, 40, 60, 255},
-			Media:       quoteData.Media,
+			Media:       media,
 			Segments: []render.TextSegment{
 				{Text: text, Color: color.RGBA{255, 255, 255, 255}},
 			},
