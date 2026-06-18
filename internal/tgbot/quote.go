@@ -5,12 +5,10 @@ import (
 	"image"
 	"image/color"
 	"log"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/Geergon/Chronicler-tg-bot/internal/render"
-	"github.com/HugoSmits86/nativewebp"
 	"github.com/celestix/gotgproto/ext"
 	"github.com/gotd/td/tg"
 )
@@ -206,20 +204,26 @@ func HandleQuote(ctx *ext.Context, update *ext.Update) error {
 			return fmt.Errorf("BuildStickerChatStack: %w", err)
 		}
 
-		stickerFileName := "out.webp"
-		file, err := os.Create(stickerFileName)
+		buffs, err := imageToWebP(sticker.Image())
 		if err != nil {
-			log.Fatalf("Error creating file %s: %v", stickerFileName, err)
+			log.Printf("imageToWebP error: %v", err)
+			return err
 		}
-		defer file.Close()
-
-		err = nativewebp.Encode(file, sticker.Image(), nil)
+		docClass, err := uploadMedia(ctx, chatID, buffs, "image/webp")
 		if err != nil {
-			log.Fatalf("Error encoding image to WebP: %v", err)
+			log.Printf("uploadMedia error: %v", err)
+			return err
+		}
+		doc, ok := docClass.(*tg.Document)
+		if !ok {
+			return fmt.Errorf("unexpected doc type: %T", docClass)
 		}
 
-		// // TODO: відправити sticker як документ/стікер в чат
-		// _ = sticker
+		err = sendStickerToChat(ctx, chatID, doc)
+		if err != nil {
+			log.Printf("sendStickerToChat error: %v", err)
+			return err
+		}
 
 		return nil
 	} else if len(args) == 2 {
@@ -241,8 +245,25 @@ func HandleQuote(ctx *ext.Context, update *ext.Update) error {
 			return fmt.Errorf("BuildStickerChatStack: %w", err)
 		}
 
-		if err := render.SavePNG("out_chat_stack.png", sticker.Image()); err != nil {
-			log.Fatal("save:", err)
+		buffs, err := imageToWebP(sticker.Image())
+		if err != nil {
+			log.Printf("imageToWebP error: %v", err)
+			return err
+		}
+		docClass, err := uploadMedia(ctx, chatID, buffs, "image/webp")
+		if err != nil {
+			log.Printf("uploadMedia error: %v", err)
+			return err
+		}
+		doc, ok := docClass.(*tg.Document)
+		if !ok {
+			return fmt.Errorf("unexpected doc type: %T", docClass)
+		}
+
+		err = sendStickerToChat(ctx, chatID, doc)
+		if err != nil {
+			log.Printf("sendStickerToChat error: %v", err)
+			return err
 		}
 
 	} else {

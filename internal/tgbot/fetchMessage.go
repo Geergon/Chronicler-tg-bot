@@ -153,7 +153,7 @@ func getHistory(ctx *ext.Context, chatID int64, msgID int, limit int) ([]*tg.Mes
 	for _, m := range rawMessages {
 		msg, ok := m.(*tg.Message)
 		if !ok {
-			continue // MessageEmpty або MessageService
+			continue // MessageEmpty or MessageService
 		}
 		if msg.Message == "" && msg.Media == nil {
 			continue // empty

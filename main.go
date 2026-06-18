@@ -15,14 +15,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/gotd/td/tg"
 	"github.com/joho/godotenv"
-	"github.com/tdewolff/canvas"
 	"gopkg.in/natefinch/lumberjack.v2"
-)
-
-var (
-	notoSansFamily *canvas.FontFamily
-	notoMonoFamily *canvas.FontFamily
-	emojiFamily    *canvas.FontFamily
 )
 
 func init() {
