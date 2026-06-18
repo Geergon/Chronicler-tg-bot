@@ -31,7 +31,7 @@ func NewSizes(scale float64) Sizes {
 		PaddingY:            12 * scale,
 		NameFontSize:        46 * scale,
 		ReplyFontSize:       36 * scale,
-		TextFontSize:        48 * scale,
+		TextFontSize:        58 * scale,
 		GapAfterName:        6 * scale,
 		GapAfterReply:       10 * scale,
 		ReplyLineWidth:      5 * scale,
