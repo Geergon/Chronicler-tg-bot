@@ -10,6 +10,95 @@ import (
 	"github.com/gotd/td/tg"
 )
 
+func fetchAvatar(ctx *ext.Context, id int64) (image.Image, error) {
+	inputPeer := ctx.PeerStorage.GetInputPeerById(id)
+	if inputPeer == nil {
+		return nil, fmt.Errorf("cannot resolve peer %d", id)
+	}
+
+	switch inputPeer.(type) {
+	case *tg.InputPeerUser, *tg.InputPeerSelf:
+		return fetchUserAvatar(ctx, id)
+	case *tg.InputPeerChannel, *tg.InputPeerChat:
+		return fetchChatAvatar(ctx, id)
+	default:
+		return nil, fmt.Errorf("unsupported peer type: %T", inputPeer)
+	}
+}
+
+func fetchChatAvatar(ctx *ext.Context, chatID int64) (image.Image, error) {
+	inputPeer := ctx.PeerStorage.GetInputPeerById(chatID)
+	if inputPeer == nil {
+		return nil, fmt.Errorf("cannot resolve chat %d", chatID)
+	}
+
+	var photo *tg.Photo
+
+	switch peer := inputPeer.(type) {
+	case *tg.InputPeerChannel:
+		full, err := ctx.Raw.ChannelsGetFullChannel(ctx, &tg.InputChannel{
+			ChannelID:  peer.ChannelID,
+			AccessHash: peer.AccessHash,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("ChannelsGetFullChannel: %w", err)
+		}
+
+		fullChat, ok := full.FullChat.(*tg.ChannelFull)
+		if !ok {
+			log.Println("failed to get full info about channel")
+			return nil, nil
+		}
+
+		photo, ok = fullChat.ChatPhoto.(*tg.Photo)
+		if !ok {
+			log.Println("failed to get channel photo")
+			return nil, nil
+		}
+
+	case *tg.InputPeerChat:
+		full, err := ctx.Raw.MessagesGetFullChat(ctx, peer.ChatID)
+		if err != nil {
+			return nil, fmt.Errorf("MessagesGetFullChat: %w", err)
+		}
+
+		fullChat, ok := full.FullChat.(*tg.ChatFull)
+		if !ok {
+			log.Println("failed to get full info about chat")
+			return nil, nil
+		}
+
+		photo, ok = fullChat.ChatPhoto.(*tg.Photo)
+		if !ok {
+			log.Println("failed to get chat photo")
+			return nil, nil
+		}
+
+	default:
+		return nil, fmt.Errorf("unsupported peer type: %T", inputPeer)
+	}
+
+	if photo == nil {
+		log.Println("channel/chat avatar doesn't exist")
+		return nil, nil
+	}
+
+	bestSize := pickBestAvatarSize(photo.Sizes)
+	if bestSize == nil {
+		log.Println("failed to get bestsize for channel avatar")
+		return nil, nil
+	}
+
+	location := &tg.InputPhotoFileLocation{
+		ID:            photo.ID,
+		AccessHash:    photo.AccessHash,
+		FileReference: photo.FileReference,
+		ThumbSize:     bestSize.Type,
+	}
+
+	return downloadFile(ctx, location)
+}
+
 func fetchUserAvatar(ctx *ext.Context, userID int64) (image.Image, error) {
 	inputPeer := ctx.PeerStorage.GetInputPeerById(userID)
 	inputUser, ok := toInputUser(inputPeer)

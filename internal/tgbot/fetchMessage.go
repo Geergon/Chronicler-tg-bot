@@ -8,7 +8,7 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-func fetchMessage(ctx *ext.Context, chatID int64, msgID int) (*tg.Message, map[int64]*tg.User, error) {
+func fetchMessage(ctx *ext.Context, chatID int64, msgID int) (*tg.Message, map[int64]*tg.User, map[int64]string, error) {
 	inputPeer := ctx.PeerStorage.GetInputPeerById(chatID)
 	var msgClass tg.MessagesMessagesClass
 	var err error
@@ -27,38 +27,42 @@ func fetchMessage(ctx *ext.Context, chatID int64, msgID int) (*tg.Message, map[i
 			&tg.InputMessageID{ID: msgID},
 		})
 	default:
-		return nil, nil, fmt.Errorf("unsupported peer type: %T", inputPeer)
+		return nil, nil, nil, fmt.Errorf("unsupported peer type: %T", inputPeer)
 	}
 
 	if err != nil {
 		log.Printf("failed to get messages: %v", err)
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	var messages []tg.MessageClass
 	var users []tg.UserClass
+	var chats []tg.ChatClass
 
 	switch r := msgClass.(type) {
 	case *tg.MessagesChannelMessages:
 		messages = r.Messages
 		users = r.Users
+		chats = r.Chats
 	case *tg.MessagesMessages:
 		messages = r.Messages
 		users = r.Users
+		chats = r.Chats
 	case *tg.MessagesMessagesSlice:
 		messages = r.Messages
 		users = r.Users
+		chats = r.Chats
 	default:
-		return nil, nil, fmt.Errorf("unknown messages response type: %T", msgClass)
+		return nil, nil, nil, fmt.Errorf("unknown messages response type: %T", msgClass)
 	}
 
 	if len(messages) == 0 {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	msg, ok := messages[0].(*tg.Message)
 	if !ok {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	userMap := make(map[int64]*tg.User)
@@ -67,7 +71,17 @@ func fetchMessage(ctx *ext.Context, chatID int64, msgID int) (*tg.Message, map[i
 			userMap[user.ID] = user
 		}
 	}
-	return msg, userMap, nil
+
+	chatMap := make(map[int64]string)
+	for _, c := range chats {
+		switch ch := c.(type) {
+		case *tg.Chat:
+			chatMap[ch.ID] = ch.Title
+		case *tg.Channel:
+			chatMap[ch.ID] = ch.Title
+		}
+	}
+	return msg, userMap, chatMap, nil
 }
 
 func getHistory(ctx *ext.Context, chatID int64, msgID int, limit int) ([]*tg.Message, map[int64]*tg.User, error) {
@@ -157,31 +171,55 @@ func resolveForwardAuthorFull(
 	fwd *tg.MessageFwdHeader,
 	userMap map[int64]*tg.User,
 	chatMap map[int64]string,
-) (id int64, name string) {
+) (MessageAuthor, bool) {
 	if fwd == nil {
-		return 0, ""
+		log.Println("fwd is nil")
+		return MessageAuthor{}, false
 	}
 
+	var name string
+	var id int64
+	var fwdAuthor MessageAuthor
+
 	if fwd.FromName != "" {
-		return 0, fwd.FromName
+		return MessageAuthor{ID: 1, FirstName: fwd.FromName}, true
 	}
 
 	switch peer := fwd.FromID.(type) {
 	case *tg.PeerUser:
+		fwdAuthor = MessageAuthor{ID: peer.UserID}
 		id = peer.UserID
 		if u, ok := userMap[peer.UserID]; ok {
 			name = u.FirstName
 			if u.LastName != "" {
 				name += " " + u.LastName
 			}
+
+			fwdAuthor.FirstName = name
+			fwdAuthor.ID = id
 		}
 
 	case *tg.PeerChannel:
+		fwdAuthor = MessageAuthor{ID: peer.ChannelID}
 		id = peer.ChannelID
 		if title, ok := chatMap[peer.ChannelID]; ok {
 			name = title
 		}
+		fwdAuthor.FirstName = name
+		fwdAuthor.ID = id
 	}
-
-	return id, name
+	return fwdAuthor, true
 }
+
+// func getChatAvatar(ctx *ext.Context, chatID int64) error {
+// 	chat, err := ctx.Raw.MessagesGetChats(ctx, []int64{chatID})
+// 	if err != nil {
+// 		return fmt.Errorf("failed to get channel/chat info: %v", err)
+// 	}
+//
+// 	var chatList []tg.ChatClass
+// 	switch data := chat.(type) {
+// 	case *tg.Message:
+// 		chatList = data.Chats
+// 	}
+// }

@@ -44,7 +44,7 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 		return a
 	}
 
-	replyMsg, replyUsers, err := fetchMessage(ctx, chatID, replyToMsgID)
+	replyMsg, replyUsers, replyChatMap, err := fetchMessage(ctx, chatID, replyToMsgID)
 	if err != nil || replyMsg == nil {
 		return nil, err
 	}
@@ -54,22 +54,28 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 		return nil, err
 	}
 
+	author := resolveAuthor(replyMsg, replyUsers)
+	fwdAuthor, ok := resolveForwardAuthorFull(&replyMsg.FwdFrom, replyUsers, replyChatMap)
+	if ok && fwdAuthor.FirstName != "" {
+		author = fwdAuthor
+	}
 	result := &QuoteData{
-		Author: resolveAuthor(replyMsg, replyUsers),
+		Author: author,
 		Text:   replyMsg.Message,
 		Media:  media,
 	}
 
 	innerReply, ok := replyMsg.ReplyTo.(*tg.MessageReplyHeader)
 	if ok && innerReply != nil && innerReply.ReplyToMsgID != 0 {
-		innerMsg, innerUsers, err := fetchMessage(ctx, chatID, innerReply.ReplyToMsgID)
+		innerMsg, innerUsers, _, err := fetchMessage(ctx, chatID, innerReply.ReplyToMsgID)
+		author := resolveAuthor(innerMsg, innerUsers)
 		if err == nil && innerMsg != nil {
 			text := innerMsg.Message
 			if innerReply.Quote && innerReply.QuoteText != "" {
 				text = innerReply.QuoteText
 			}
 			result.ReplyTo = &QuoteData{
-				Author: resolveAuthor(innerMsg, innerUsers),
+				Author: author,
 				Text:   text,
 			}
 		}
@@ -98,22 +104,35 @@ func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int,
 		return nil, err
 	}
 
+	msg, users, chats, err := fetchMessage(ctx, chatID, replyToMsgID)
+	if err != nil {
+		log.Printf("failed to get message: %v", err)
+		return nil, err
+	}
+
+	author := resolveAuthor(replyMsg, replyUsers)
+	fwdAuthor, ok := resolveForwardAuthorFull(&msg.FwdFrom, users, chats)
+	if ok && fwdAuthor.FirstName != "" {
+		author = fwdAuthor
+	}
+
 	result := &QuoteData{
-		Author: resolveAuthor(replyMsg, replyUsers),
+		Author: author,
 		Text:   replyMsg.Message,
 		Media:  media,
 	}
 
 	innerReply, ok := replyMsg.ReplyTo.(*tg.MessageReplyHeader)
 	if ok && innerReply != nil && innerReply.ReplyToMsgID != 0 {
-		innerMsg, innerUsers, err := fetchMessage(ctx, chatID, innerReply.ReplyToMsgID)
+		innerMsg, innerUsers, _, err := fetchMessage(ctx, chatID, innerReply.ReplyToMsgID)
+		author := resolveAuthor(innerMsg, innerUsers)
 		if err == nil && innerMsg != nil {
 			text := innerMsg.Message
 			if innerReply.Quote && innerReply.QuoteText != "" {
 				text = innerReply.QuoteText
 			}
 			result.ReplyTo = &QuoteData{
-				Author: resolveAuthor(innerMsg, innerUsers),
+				Author: author,
 				Text:   text,
 			}
 		}
@@ -163,9 +182,9 @@ func HandleQuote(ctx *ext.Context, update *ext.Update) error {
 			text = replyHeader.QuoteText
 		}
 
-		avatar, err := fetchUserAvatar(ctx, quoteData.Author.ID)
+		avatar, err := fetchAvatar(ctx, quoteData.Author.ID)
 		if err != nil {
-			log.Printf("fetchUserAvatar: %v", err)
+			log.Printf("fetchAvatar: %v", err)
 		}
 
 		messages := []render.ChatMessage{
@@ -244,7 +263,7 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 	}
 
 	var chatMessages []render.ChatMessage
-	for _, msg := range messagesStack {
+	for i, msg := range messagesStack {
 		quoteData, err := extractQuoteDataFromStack(ctx, chatID, msg.ID, msg, users)
 		if err != nil {
 			return nil, fmt.Errorf("extractQuoteData: %w", err)
@@ -264,13 +283,13 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 
 		// quoted text instead of actual text if user quoted part of the text in the /q command
 		text := quoteData.Text
-		if replyHeader.Quote && replyHeader.QuoteText != "" {
+		if replyHeader.Quote && replyHeader.QuoteText != "" && i == 0 {
 			text = replyHeader.QuoteText
 		}
 
-		avatar, err := fetchUserAvatar(ctx, quoteData.Author.ID)
+		avatar, err := fetchAvatar(ctx, quoteData.Author.ID)
 		if err != nil {
-			log.Printf("fetchUserAvatar: %v", err)
+			log.Printf("fetchAvatar: %v", err)
 		}
 
 		chatMessages = append(chatMessages, render.ChatMessage{
