@@ -89,6 +89,14 @@ func main() {
 		}()
 		return nil
 	}))
+	dispatcher.AddHandler(handlers.NewCommand("qs", func(ctx *ext.Context, update *ext.Update) error {
+		go func() {
+			if err := tgbot.HandleStickerSetCommand(ctx, update, client.Self.Username, botToken); err != nil {
+				log.Printf("sticker set error: %v", err)
+			}
+		}()
+		return nil
+	}))
 
 	dispatcher.AddHandler(handlers.NewCommand("start", func(ctx *ext.Context, u *ext.Update) error {
 		chatID := u.EffectiveChat().GetID()
