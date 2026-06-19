@@ -1,6 +1,5 @@
 .env
 bot.log
-assets/emoji/apple
 db
 out_chat_stack.png
 out.webp
