@@ -344,15 +344,15 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 			text = replyHeader.QuoteText
 		}
 
-		var media []image.Image
-		for _, msg := range group.Messages {
-			imgs, err := fetchMedia(ctx, msg)
-			if err != nil {
-				log.Printf("fetchMedia for msg %d: %v", msg.ID, err)
-				continue
-			}
-			media = append(media, imgs...)
-		}
+		// var media []image.Image
+		// for _, msg := range group.Messages {
+		// 	imgs, err := fetchMedia(ctx, msg)
+		// 	if err != nil {
+		// 		log.Printf("fetchMedia for msg %d: %v", msg.ID, err)
+		// 		continue
+		// 	}
+		// 	media = append(media, imgs...)
+		// }
 
 		avatar, err := fetchAvatar(ctx, quoteData.Author.ID)
 		if err != nil {
@@ -365,7 +365,7 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 			AvatarImg:   avatar,
 			Reply:       replyInfo,
 			BubbleColor: color.RGBA{45, 40, 60, 255},
-			Media:       media,
+			Media:       quoteData.Media,
 			Segments: []render.TextSegment{
 				{Text: text, Color: color.RGBA{255, 255, 255, 255}},
 			},
