@@ -13,7 +13,8 @@ func InitDB(path string) (*sql.DB, error) {
 						chat_id INTEGER PRIMARY KEY, 
 						current_pack_name TEXT NOT NULL,
 						current_pack_title TEXT NOT NULL,
-						pack_index INTEGER NOT NULL DEFAULT 1
+						pack_index INTEGER NOT NULL DEFAULT 0,
+						creator_id INTEGER NOT NULL DEFAULT 0
 				);
     `
 	_, err = db.Exec(createTable)
