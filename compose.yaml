@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  chronicler-tg-bot:
+    # image: geergon/chronicler-tg-bot:latest
+    build: .
+    environment:
+      APP_ID: ${APP_ID}
+      API_HASH: ${API_HASH}
+      BOT_TOKEN: ${BOT_TOKEN}
+    volumes:
+      - ./config:/config:z
+      - ./db:/db:z

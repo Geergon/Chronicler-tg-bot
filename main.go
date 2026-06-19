@@ -52,27 +52,34 @@ func main() {
 	initViper()
 
 	if err := render.InitFonts(); err != nil {
+		fmt.Printf("render init fonts: %v", err)
 		log.Fatal("render init fonts:", err)
 	}
 
-	a, isAppIdExist := os.LookupEnv("APP_ID")
-	if !isAppIdExist {
+	a := os.Getenv("APP_ID")
+	if a == "" {
+		fmt.Printf("invalid APP_ID")
 		log.Fatal("invalid APP_ID")
 	}
+
 	appId, err := strconv.Atoi(a)
 	if err != nil {
 		log.Fatalf("failed to parse APP_ID: %v", err)
 	}
 
-	apiHash, isHashExist := os.LookupEnv("API_HASH")
-	if !isHashExist {
-		log.Fatal("invalid  API_HASH")
+	apiHash := os.Getenv("API_HASH")
+	if apiHash == "" {
+		fmt.Printf("invalid APP_ID")
+		log.Fatal("invalid APP_ID")
 	}
 
-	botToken, isTokenExist := os.LookupEnv("TOKEN")
-	if !isTokenExist {
-		log.Fatal("invalid BOT_TOKEN")
+	botToken := os.Getenv("BOT_TOKEN")
+	if botToken == "" {
+		fmt.Printf("invalid APP_ID")
+		log.Fatal("invalid APP_ID")
 	}
+
+	_ = os.MkdirAll("./db", 0755)
 
 	chatStickerSetDb, err = database.InitDB("./db/chatStickerSet.db")
 	if err != nil {
@@ -162,7 +169,7 @@ func initViper() {
 	viper.SetDefault("ui.gap_after_media", 10)
 
 	err := viper.SafeWriteConfig()
-	if err != nil {
+	if _, ok := err.(viper.ConfigFileAlreadyExistsError); !ok {
 		log.Println("save config error: ", err)
 	}
 
