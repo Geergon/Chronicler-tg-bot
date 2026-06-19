@@ -152,6 +152,9 @@ func HandleQuote(ctx *ext.Context, update *ext.Update) error {
 	}
 
 	chatID := update.EffectiveChat().GetID()
+	userID := update.EffectiveUser().ID
+	userFirstName := update.EffectiveUser().FirstName
+	userLastName := update.EffectiveUser().LastName
 
 	args := strings.Fields(update.EffectiveMessage.Text)
 
@@ -180,15 +183,25 @@ func HandleQuote(ctx *ext.Context, update *ext.Update) error {
 			text = replyHeader.QuoteText
 		}
 
-		avatar, err := fetchAvatar(ctx, quoteData.Author.ID)
+		authorID := quoteData.Author.ID
+		authorName := quoteData.Author.FirstName
+		if quoteData.Author.ID == 0 || quoteData.Author.FirstName == "" {
+			authorID = userID
+			authorName = userFirstName
+			if userLastName != "" {
+				authorName = userFirstName + " " + userLastName
+			}
+		}
+
+		avatar, err := fetchAvatar(ctx, authorID)
 		if err != nil {
 			log.Printf("fetchAvatar: %v", err)
 		}
 
 		messages := []render.ChatMessage{
 			{
-				AuthorID:    quoteData.Author.ID,
-				AuthorName:  quoteData.Author.FirstName,
+				AuthorID:    authorID,
+				AuthorName:  authorName,
 				Reply:       replyInfo,
 				AvatarImg:   avatar,
 				BubbleColor: color.RGBA{45, 40, 60, 255},
