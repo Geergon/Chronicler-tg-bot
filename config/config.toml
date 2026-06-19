@@ -1,0 +1,17 @@
+[ui]
+avatar_gap = 8
+avatar_size = 45
+corner_radius = 18
+gap_after_media = 10
+gap_after_name = 2
+gap_after_reply = 6
+media_group_gap = 6
+media_radius = 12
+name_font_size = 46
+padding_x = 10
+padding_y = 12
+reply_font_size = 36
+reply_line_gap = 1
+reply_line_width = 5
+text_font_size = 58
+vertical_gap = 4

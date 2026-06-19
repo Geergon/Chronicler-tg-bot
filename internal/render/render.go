@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"git.sr.ht/~sbinet/gg"
+	"github.com/Geergon/Chronicler-tg-bot/internal/config"
 	"github.com/tdewolff/canvas"
 	"golang.org/x/image/draw"
 )
@@ -25,25 +26,26 @@ const (
 )
 
 func NewSizes(scale float64) Sizes {
+	ui := config.GetUI()
 	return Sizes{
 		Scale:               scale,
-		PaddingX:            10 * scale,
-		PaddingY:            12 * scale,
-		NameFontSize:        46 * scale,
-		ReplyFontSize:       36 * scale,
-		TextFontSize:        58 * scale,
-		GapAfterName:        2 * scale,
-		GapAfterReply:       6 * scale,
-		ReplyLineWidth:      5 * scale,
-		ReplyLineGap:        1 * scale,
-		CornerRadius:        18 * scale,
-		AvatarSize:          45 * scale,
-		AvatarGap:           8 * scale,
-		VerticalGap:         4 * scale,
-		MediaRadius:         12 * scale,
-		MediaGroupGap:       6 * scale,
+		PaddingX:            float64(ui.PaddingX) * scale,
+		PaddingY:            float64(ui.PaddingY) * scale,
+		NameFontSize:        float64(ui.NameFontSize) * scale,
+		ReplyFontSize:       float64(ui.ReplyFontSize) * scale,
+		TextFontSize:        float64(ui.TextFontSize) * scale,
+		GapAfterName:        float64(ui.GapAfterName) * scale,
+		GapAfterReply:       float64(ui.GapAfterReply) * scale,
+		ReplyLineWidth:      float64(ui.ReplyLineWidth) * scale,
+		ReplyLineGap:        float64(ui.ReplyLineGap) * scale,
+		CornerRadius:        float64(ui.CornerRadius) * scale,
+		AvatarSize:          float64(ui.AvatarSize) * scale,
+		AvatarGap:           float64(ui.AvatarGap) * scale,
+		VerticalGap:         float64(ui.VerticalGap) * scale,
+		MediaRadius:         float64(ui.MediaRadius) * scale,
+		MediaGroupGap:       float64(ui.MediaGroupGap) * scale,
 		MediaMaxHeightRatio: 1.3,
-		GapAfterMedia:       10 * scale,
+		GapAfterMedia:       float64(ui.GapAfterMedia) * scale,
 	}
 }
 

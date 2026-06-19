@@ -6,7 +6,9 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"sync"
 
+	"github.com/Geergon/Chronicler-tg-bot/internal/config"
 	"github.com/Geergon/Chronicler-tg-bot/internal/database"
 	"github.com/Geergon/Chronicler-tg-bot/internal/render"
 	"github.com/Geergon/Chronicler-tg-bot/internal/tgbot"
@@ -14,13 +16,18 @@ import (
 	"github.com/celestix/gotgproto/dispatcher/handlers"
 	"github.com/celestix/gotgproto/ext"
 	"github.com/celestix/gotgproto/sessionMaker"
+	"github.com/fsnotify/fsnotify"
 	"github.com/glebarez/sqlite"
 	"github.com/gotd/td/tg"
 	"github.com/joho/godotenv"
+	"github.com/spf13/viper"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-var chatStickerSetDb *sql.DB
+var (
+	chatStickerSetDb *sql.DB
+	viperMutex       sync.RWMutex
+)
 
 func init() {
 	logFile, err := os.OpenFile("bot.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
@@ -42,6 +49,8 @@ func init() {
 }
 
 func main() {
+	initViper()
+
 	if err := render.InitFonts(); err != nil {
 		log.Fatal("render init fonts:", err)
 	}
@@ -52,7 +61,7 @@ func main() {
 	}
 	appId, err := strconv.Atoi(a)
 	if err != nil {
-		fmt.Errorf("failed to get appID: %v", err)
+		log.Fatalf("failed to parse APP_ID: %v", err)
 	}
 
 	apiHash, isHashExist := os.LookupEnv("API_HASH")
@@ -125,4 +134,60 @@ func main() {
 
 	fmt.Printf("Bot (@%s) started...\n", client.Self.Username)
 	client.Idle()
+}
+
+func initViper() {
+	viperMutex.Lock()
+	viper.SetConfigName("config")
+	viper.SetConfigType("toml")
+	viper.AddConfigPath("./config")
+
+	_ = os.MkdirAll("./config", 0755)
+
+	viper.SetDefault("ui.padding_x", 10)
+	viper.SetDefault("ui.padding_y", 12)
+	viper.SetDefault("ui.name_font_size", 46)
+	viper.SetDefault("ui.reply_font_size", 36)
+	viper.SetDefault("ui.text_font_size", 58)
+	viper.SetDefault("ui.gap_after_name", 2)
+	viper.SetDefault("ui.gap_after_reply", 6)
+	viper.SetDefault("ui.reply_line_width", 5)
+	viper.SetDefault("ui.reply_line_gap", 1)
+	viper.SetDefault("ui.corner_radius", 18)
+	viper.SetDefault("ui.avatar_size", 45)
+	viper.SetDefault("ui.avatar_gap", 8)
+	viper.SetDefault("ui.vertical_gap", 4)
+	viper.SetDefault("ui.media_radius", 12)
+	viper.SetDefault("ui.media_group_gap", 6)
+	viper.SetDefault("ui.gap_after_media", 10)
+
+	err := viper.SafeWriteConfig()
+	if err != nil {
+		log.Println("save config error: ", err)
+	}
+
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			log.Printf("config file error: %v", err)
+		}
+	} else {
+		config.UpdateFromViper()
+	}
+
+	viperMutex.Unlock()
+	viper.WatchConfig()
+
+	viper.OnConfigChange(func(e fsnotify.Event) {
+		viperMutex.Lock()
+		defer viperMutex.Unlock()
+
+		log.Printf("configuration changed: %s", e.Name)
+
+		if err := viper.ReadInConfig(); err != nil {
+			log.Printf("configuration reading error: %v", err)
+			return
+		}
+
+		config.UpdateFromViper()
+	})
 }
