@@ -102,6 +102,15 @@ func buildStandaloneMedia(img image.Image) (*gg.Context, error) {
 	return finalizeSize(dc), nil
 }
 
+func buildStandaloneMediaNode(media []image.Image, maxWidth float64, s Sizes) (*Node, error) {
+	if len(media) == 1 {
+		leaf := singleMediaLeaf(media[0], maxWidth, s.MediaMaxHeightRatio, s.MediaRadius)
+		return leaf, nil
+	}
+	row := mediaGroupRow(media, maxWidth, s.MediaGroupGap, s.MediaRadius)
+	return row, nil
+}
+
 func roundImage(img image.Image, r float64) *gg.Context {
 	bounds := img.Bounds()
 	w := bounds.Dx()

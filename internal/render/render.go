@@ -196,8 +196,14 @@ func buildRoot(messages []ChatMessage, s Sizes) (*Node, error) {
 	var rows []*Node
 	for i, msg := range messages {
 		isFirst := i == 0 || messages[i-1].AuthorID != msg.AuthorID
-		block := MessageBlock{AuthorID: msg.AuthorID, Segments: msg.Segments, BubbleColor: msg.BubbleColor, Reply: msg.Reply, Media: msg.Media}
-		if isFirst {
+		block := MessageBlock{
+			Standalone:  msg.Standalone,
+			Media:       msg.Media,
+			Segments:    msg.Segments,
+			BubbleColor: msg.BubbleColor,
+			Reply:       msg.Reply,
+		}
+		if !msg.Standalone && isFirst {
 			block.AuthorName = msg.AuthorName
 			block.AvatarImg = msg.AvatarImg
 		}
@@ -212,6 +218,12 @@ func buildRoot(messages []ChatMessage, s Sizes) (*Node, error) {
 }
 
 func BuildMessageRow(m MessageBlock, maxBubbleWidth float64, s Sizes) (*Node, error) {
+	// if message contain only media without text, it will render message as pictures without avatar, bubble and nickname
+	// division by 1.5 reduce the size of pictures. The value is approximate and not exact
+	if m.Standalone && len(m.Media) > 0 {
+		return buildStandaloneMediaNode(m.Media, maxBubbleWidth/1.5, s)
+	}
+
 	bubble, err := BuildQuoteBubble(QuoteParams{
 		AuthorID:   m.AuthorID,
 		AuthorName: m.AuthorName,

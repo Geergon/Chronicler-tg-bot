@@ -28,6 +28,7 @@ type MessageBlock struct {
 	AuthorName  string
 	AvatarImg   image.Image // nil якщо аватар не показуємо (групове повідомлення підряд)
 	Reply       *ReplyInfo
+	Standalone  bool
 	Segments    []TextSegment
 	BubbleColor color.Color
 	Media       []image.Image
@@ -37,6 +38,7 @@ type ChatMessage struct {
 	AuthorID    int64
 	AuthorName  string
 	AvatarImg   image.Image
+	Standalone  bool
 	Reply       *ReplyInfo
 	Segments    []TextSegment
 	BubbleColor color.Color

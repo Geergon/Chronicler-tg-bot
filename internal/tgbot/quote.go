@@ -329,6 +329,14 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 			return nil, fmt.Errorf("extractQuoteData: %w", err)
 		}
 
+		if isMediaOnly(quoteData) {
+			chatMessages = append(chatMessages, render.ChatMessage{
+				Standalone: true,
+				Media:      quoteData.Media,
+			})
+			continue
+		}
+
 		var replyInfo *render.ReplyInfo
 		if quoteData.ReplyTo != nil {
 			replyInfo = &render.ReplyInfo{
@@ -373,4 +381,8 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 	}
 
 	return chatMessages, nil
+}
+
+func isMediaOnly(quoteData *QuoteData) bool {
+	return len(quoteData.Media) > 0 && strings.TrimSpace(quoteData.Text) == "" && quoteData.ReplyTo == nil
 }
