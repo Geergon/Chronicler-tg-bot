@@ -221,7 +221,7 @@ func BuildMessageRow(m MessageBlock, maxBubbleWidth float64, s Sizes) (*Node, er
 	// if message contain only media without text, it will render message as pictures without avatar, bubble and nickname
 	// division by 1.5 reduce the size of pictures. The value is approximate and not exact
 	if m.Standalone && len(m.Media) > 0 {
-		return buildStandaloneMediaNode(m.Media, maxBubbleWidth/1.5, s)
+		return buildStandaloneMediaNode(m.Media, maxBubbleWidth/1.3, s)
 	}
 
 	bubble, err := BuildQuoteBubble(QuoteParams{
