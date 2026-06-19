@@ -1,11 +1,13 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
 	"strconv"
 
+	"github.com/Geergon/Chronicler-tg-bot/internal/database"
 	"github.com/Geergon/Chronicler-tg-bot/internal/render"
 	"github.com/Geergon/Chronicler-tg-bot/internal/tgbot"
 	"github.com/celestix/gotgproto"
@@ -17,6 +19,8 @@ import (
 	"github.com/joho/godotenv"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
+
+var chatStickerSetDb *sql.DB
 
 func init() {
 	logFile, err := os.OpenFile("bot.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
@@ -61,6 +65,12 @@ func main() {
 		log.Fatal("invalid BOT_TOKEN")
 	}
 
+	chatStickerSetDb, err = database.InitDB("./db/chatStickerSet.db")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer chatStickerSetDb.Close()
+
 	client, err := gotgproto.NewClient(
 		// Get AppID from https://my.telegram.org/apps
 		appId,
@@ -91,7 +101,7 @@ func main() {
 	}))
 	dispatcher.AddHandler(handlers.NewCommand("qs", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
-			if err := tgbot.HandleStickerSetCommand(ctx, update, client.Self.Username, botToken); err != nil {
+			if err := tgbot.HandleSaveSticker(ctx, update, chatStickerSetDb, client.Self.Username, botToken); err != nil {
 				log.Printf("sticker set error: %v", err)
 			}
 		}()
