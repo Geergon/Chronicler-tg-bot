@@ -90,7 +90,7 @@ func fetchMessage(ctx *ext.Context, chatID int64, msgID int) (*tg.Message, map[i
 	return msg, userMap, chatMap, nil
 }
 
-func getMessageRange(ctx *ext.Context, chatID int64, startMsgID, count int) ([]MessageGroup, map[int64]*tg.User, error) {
+func getMessageRange(ctx *ext.Context, chatID int64, startMsgID, count int) ([]MessageGroup, map[int64]*tg.User, map[int64]string, error) {
 	if count <= 0 || count > 6 {
 		_, err := ctx.SendMessage(chatID, &tg.MessagesSendMessageRequest{
 			Message: "Вказана завелика кількість повідомлень для збереження. Максимальний ліміт це 6",
@@ -99,7 +99,7 @@ func getMessageRange(ctx *ext.Context, chatID int64, startMsgID, count int) ([]M
 			log.Println("failed to send message: ", err)
 		}
 
-		return nil, nil, fmt.Errorf("invalid count: %d", count)
+		return nil, nil, nil, fmt.Errorf("invalid count: %d", count)
 	}
 
 	fetchCount := count*10 + 5
@@ -125,28 +125,42 @@ func getMessageRange(ctx *ext.Context, chatID int64, startMsgID, count int) ([]M
 		msgClass, err = ctx.Raw.MessagesGetMessages(ctx, ids)
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	var rawMessages []tg.MessageClass
 	var users []tg.UserClass
+	var chats []tg.ChatClass
 
 	switch r := msgClass.(type) {
 	case *tg.MessagesChannelMessages:
 		rawMessages = r.Messages
 		users = r.Users
+		chats = r.Chats
 	case *tg.MessagesMessages:
 		rawMessages = r.Messages
 		users = r.Users
+		chats = r.Chats
 	case *tg.MessagesMessagesSlice:
 		rawMessages = r.Messages
 		users = r.Users
+		chats = r.Chats
 	}
 
 	userMap := make(map[int64]*tg.User)
 	for _, u := range users {
 		if user, ok := u.(*tg.User); ok {
 			userMap[user.ID] = user
+		}
+	}
+
+	chatMap := make(map[int64]string)
+	for _, c := range chats {
+		switch ch := c.(type) {
+		case *tg.Chat:
+			chatMap[ch.ID] = ch.Title
+		case *tg.Channel:
+			chatMap[ch.ID] = ch.Title
 		}
 	}
 
@@ -191,7 +205,7 @@ func getMessageRange(ctx *ext.Context, chatID int64, startMsgID, count int) ([]M
 		}
 	}
 
-	return groups, userMap, nil
+	return groups, userMap, chatMap, nil
 }
 
 func resolveForwardAuthorFull(

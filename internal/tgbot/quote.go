@@ -52,6 +52,17 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 		return nil, err
 	}
 
+	location, _, err := fetchStickerFromMessage(ctx, replyMsg)
+	if err != nil {
+		log.Printf("failed to fetch sticker from message: %v", err)
+	}
+	sticker, err := downloadFile(ctx, location)
+	if err == nil {
+		media = append(media, sticker)
+	} else {
+		log.Printf("failed to download sticker from message: %v", err)
+	}
+
 	author := resolveAuthor(replyMsg, replyUsers)
 	fwdAuthor, ok := resolveForwardAuthorFull(&replyMsg.FwdFrom, replyUsers, replyChatMap)
 	if ok && fwdAuthor.FirstName != "" {
@@ -82,7 +93,7 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 	return result, nil
 }
 
-func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int, replyMsg *tg.Message, replyUsers map[int64]*tg.User) (*QuoteData, error) {
+func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int, replyMsg *tg.Message, replyUsers map[int64]*tg.User, replyChatMap map[int64]string) (*QuoteData, error) {
 	resolveAuthor := func(msg *tg.Message, userMap map[int64]*tg.User) MessageAuthor {
 		peer, ok := msg.FromID.(*tg.PeerUser)
 		if !ok {
@@ -102,14 +113,21 @@ func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int,
 		return nil, err
 	}
 
-	msg, users, chats, err := fetchMessage(ctx, chatID, replyToMsgID)
+	location, _, err := fetchStickerFromMessage(ctx, replyMsg)
 	if err != nil {
-		log.Printf("failed to get message: %v", err)
-		return nil, err
+		log.Printf("failed to fetch sticker from message: %v", err)
+	}
+	if location != nil {
+		sticker, err := downloadFile(ctx, location)
+		if err == nil && sticker != nil {
+			media = append(media, sticker)
+		} else {
+			log.Printf("failed to download sticker from message: %v", err)
+		}
 	}
 
 	author := resolveAuthor(replyMsg, replyUsers)
-	fwdAuthor, ok := resolveForwardAuthorFull(&msg.FwdFrom, users, chats)
+	fwdAuthor, ok := resolveForwardAuthorFull(&replyMsg.FwdFrom, replyUsers, replyChatMap)
 	if ok && fwdAuthor.FirstName != "" {
 		author = fwdAuthor
 	}
@@ -290,7 +308,7 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 	if number == 0 {
 		return nil, fmt.Errorf("number is 0")
 	}
-	groups, users, err := getMessageRange(ctx, chatID, replyToMsgID, number)
+	groups, users, chatMap, err := getMessageRange(ctx, chatID, replyToMsgID, number)
 	if err != nil {
 		return nil, fmt.Errorf("getMessageRange: %w", err)
 	}
@@ -303,7 +321,7 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 	for i, group := range groups {
 		mainMsg := group.Messages[0]
 
-		quoteData, err := extractQuoteDataFromStack(ctx, chatID, mainMsg.ID, mainMsg, users)
+		quoteData, err := extractQuoteDataFromStack(ctx, chatID, mainMsg.ID, mainMsg, users, chatMap)
 		if err != nil {
 			return nil, fmt.Errorf("extractQuoteData: %w", err)
 		}

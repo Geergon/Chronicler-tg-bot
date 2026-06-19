@@ -1,7 +1,6 @@
 package tgbot
 
 import (
-	"bytes"
 	"fmt"
 	"image"
 	"log"
@@ -124,7 +123,7 @@ func fetchUserAvatar(ctx *ext.Context, userID int64) (image.Image, error) {
 	}
 
 	if len(photoList) == 0 {
-		log.Printf("fetchUserAvatar: no photos for user %d", userID)
+		// log.Printf("fetchUserAvatar: no photos for user %d", userID)
 		return nil, nil
 	}
 
@@ -193,44 +192,4 @@ func pickBestAvatarSize(sizes []tg.PhotoSizeClass) *tg.PhotoSize {
 		}
 	}
 	return nil
-}
-
-func downloadFile(ctx *ext.Context, location tg.InputFileLocationClass) (image.Image, error) {
-	var buf []byte
-	offset := 0
-	limit := 512 * 1024 // 512KB
-
-	for {
-		result, err := ctx.Raw.UploadGetFile(ctx, &tg.UploadGetFileRequest{
-			Location: location,
-			Offset:   int64(offset),
-			Limit:    limit,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("UploadGetFile: %w", err)
-		}
-
-		file, ok := result.(*tg.UploadFile)
-		if !ok {
-			break
-		}
-
-		buf = append(buf, file.Bytes...)
-
-		if len(file.Bytes) < limit {
-			break
-		}
-		offset += len(file.Bytes)
-	}
-
-	if len(buf) == 0 {
-		return nil, nil
-	}
-
-	img, _, err := image.Decode(bytes.NewReader(buf))
-	if err != nil {
-		return nil, fmt.Errorf("image.Decode: %w", err)
-	}
-
-	return img, nil
 }

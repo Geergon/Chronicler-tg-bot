@@ -1,6 +1,7 @@
 package tgbot
 
 import (
+	"bytes"
 	"fmt"
 	"image"
 	"log"
@@ -84,13 +85,13 @@ func fetchMediaGroup(ctx *ext.Context, chatID int64, msg *tg.Message) ([]image.I
 
 func fetchMedia(ctx *ext.Context, msg *tg.Message) ([]image.Image, error) {
 	if msg.Media == nil {
-		log.Println("message doesn't contain media")
+		// log.Println("message doesn't contain media")
 		return nil, nil
 	}
 
 	mediaPhoto, ok := msg.Media.(*tg.MessageMediaPhoto)
 	if !ok {
-		log.Println("media not photo")
+		// log.Println("media not photo")
 		return nil, nil
 	}
 
@@ -149,4 +150,120 @@ func pickBestPhotoSize(sizes []tg.PhotoSizeClass) *tg.PhotoSize {
 		}
 	}
 	return nil
+}
+
+func fetchStickerFromMessage(ctx *ext.Context, msg *tg.Message) (*tg.InputDocumentFileLocation, string, error) {
+	if msg.Media == nil {
+		return nil, "", fmt.Errorf("no media in message")
+	}
+
+	mediaDoc, ok := msg.Media.(*tg.MessageMediaDocument)
+	if !ok {
+		return nil, "", fmt.Errorf("media is not a document: %T", msg.Media)
+	}
+
+	doc, ok := mediaDoc.Document.(*tg.Document)
+	if !ok {
+		return nil, "", fmt.Errorf("document is not *tg.Document: %T", mediaDoc.Document)
+	}
+
+	isSticker := false
+	for _, attr := range doc.Attributes {
+		if _, ok := attr.(*tg.DocumentAttributeSticker); ok {
+			isSticker = true
+			break
+		}
+	}
+	if !isSticker {
+		return nil, "", fmt.Errorf("document is not a sticker")
+	}
+
+	mimeType := doc.MimeType
+	if mimeType != "image/webp" {
+		return nil, mimeType, fmt.Errorf("unsupported sticker type: %s (only static webp supported)", mimeType)
+	}
+
+	location := &tg.InputDocumentFileLocation{
+		ID:            doc.ID,
+		AccessHash:    doc.AccessHash,
+		FileReference: doc.FileReference,
+		ThumbSize:     "", // порожньо = оригінал
+	}
+
+	return location, mimeType, nil
+}
+
+func downloadFileBytes(ctx *ext.Context, location tg.InputFileLocationClass) ([]byte, error) {
+	var buf []byte
+	offset := 0
+	limit := 512 * 1024
+
+	for {
+		result, err := ctx.Raw.UploadGetFile(ctx, &tg.UploadGetFileRequest{
+			Location: location,
+			Offset:   int64(offset),
+			Limit:    limit,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("UploadGetFile: %w", err)
+		}
+
+		file, ok := result.(*tg.UploadFile)
+		if !ok {
+			break
+		}
+
+		buf = append(buf, file.Bytes...)
+
+		if len(file.Bytes) < limit {
+			break
+		}
+		offset += len(file.Bytes)
+	}
+
+	if len(buf) == 0 {
+		return nil, fmt.Errorf("empty file")
+	}
+
+	return buf, nil
+}
+
+func downloadFile(ctx *ext.Context, location tg.InputFileLocationClass) (image.Image, error) {
+	var buf []byte
+	offset := 0
+	limit := 512 * 1024 // 512KB
+
+	for {
+		result, err := ctx.Raw.UploadGetFile(ctx, &tg.UploadGetFileRequest{
+			Location: location,
+			Offset:   int64(offset),
+			Limit:    limit,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("UploadGetFile: %w", err)
+		}
+
+		file, ok := result.(*tg.UploadFile)
+		if !ok {
+			break
+		}
+
+		buf = append(buf, file.Bytes...)
+
+		if len(file.Bytes) < limit {
+			break
+		}
+		offset += len(file.Bytes)
+	}
+
+	if len(buf) == 0 {
+		return nil, nil
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(buf))
+	if err != nil {
+		return nil, fmt.Errorf("image.Decode: %w", err)
+	}
+
+	return img, nil
 }
