@@ -52,16 +52,17 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 		return nil, err
 	}
 
-	location, _, err := fetchStickerFromMessage(ctx, replyMsg)
-	if err != nil {
-		log.Printf("failed to fetch sticker from message: %v", err)
-	}
-	sticker, err := downloadFile(ctx, location)
+	location, _, _ := fetchStickerFromMessage(ctx, replyMsg)
+	// if err != nil {
+	// 	log.Printf("failed to fetch sticker from message: %v", err)
+	// }
+	sticker, _ := downloadFile(ctx, location)
 	if err == nil {
 		media = append(media, sticker)
-	} else {
-		log.Printf("failed to download sticker from message: %v", err)
 	}
+	// else {
+	// 	log.Printf("failed to download sticker from message: %v", err)
+	// }
 
 	author := resolveAuthor(replyMsg, replyUsers)
 	fwdAuthor, ok := resolveForwardAuthorFull(&replyMsg.FwdFrom, replyUsers, replyChatMap)

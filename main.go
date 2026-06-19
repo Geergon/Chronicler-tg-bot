@@ -52,30 +52,30 @@ func main() {
 	initViper()
 
 	if err := render.InitFonts(); err != nil {
-		fmt.Printf("render init fonts: %v", err)
+		fmt.Printf("render init fonts: %v\n", err)
 		log.Fatal("render init fonts:", err)
 	}
 
 	a := os.Getenv("APP_ID")
 	if a == "" {
-		fmt.Printf("invalid APP_ID")
+		fmt.Printf("invalid APP_ID\n")
 		log.Fatal("invalid APP_ID")
 	}
 
 	appId, err := strconv.Atoi(a)
 	if err != nil {
-		log.Fatalf("failed to parse APP_ID: %v", err)
+		log.Fatalf("failed to parse APP_ID: %v\n", err)
 	}
 
 	apiHash := os.Getenv("API_HASH")
 	if apiHash == "" {
-		fmt.Printf("invalid APP_ID")
+		fmt.Printf("invalid APP_ID\n")
 		log.Fatal("invalid APP_ID")
 	}
 
 	botToken := os.Getenv("BOT_TOKEN")
 	if botToken == "" {
-		fmt.Printf("invalid APP_ID")
+		fmt.Printf("invalid APP_ID\n")
 		log.Fatal("invalid APP_ID")
 	}
 
@@ -136,6 +136,11 @@ func main() {
 			log.Printf("Помилка надсилання повідомлення: %v", err)
 			return err
 		}
+		return nil
+	}))
+
+	dispatcher.AddHandler(handlers.NewCommand("qlogs", func(ctx *ext.Context, update *ext.Update) error {
+		tgbot.SendLogs(ctx, update)
 		return nil
 	}))
 
