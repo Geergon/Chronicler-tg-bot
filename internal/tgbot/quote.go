@@ -183,7 +183,7 @@ func HandleQuote(ctx *ext.Context, update *ext.Update) error {
 			return fmt.Errorf("extractQuoteData: %w", err)
 		}
 		if quoteData == nil {
-			return fmt.Errorf("extractQuoteData: %w", err)
+			return fmt.Errorf("extractQuoteData nil")
 		}
 
 		var replyInfo *render.ReplyInfo

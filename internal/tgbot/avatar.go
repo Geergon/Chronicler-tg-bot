@@ -123,7 +123,7 @@ func fetchUserAvatar(ctx *ext.Context, userID int64) (image.Image, error) {
 	}
 
 	if len(photoList) == 0 {
-		// log.Printf("fetchUserAvatar: no photos for user %d", userID)
+		log.Printf("fetchUserAvatar: no photos for user %d", userID)
 		return nil, nil
 	}
 
@@ -133,11 +133,11 @@ func fetchUserAvatar(ctx *ext.Context, userID int64) (image.Image, error) {
 		return nil, nil
 	}
 
-	// log.Printf("fetchUserAvatar: photo ID=%d sizes=%d", photo.ID, len(photo.Sizes))
+	log.Printf("fetchUserAvatar: photo ID=%d sizes=%d", photo.ID, len(photo.Sizes))
 
-	// for _, s := range photo.Sizes {
-	// 	log.Printf("  size type=%T %+v", s, s)
-	// }
+	for _, s := range photo.Sizes {
+		log.Printf("  size type=%T %+v", s, s)
+	}
 
 	bestSize := pickBestAvatarSize(photo.Sizes)
 	if bestSize == nil {
