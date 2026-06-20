@@ -100,6 +100,11 @@ func fetchChatAvatar(ctx *ext.Context, chatID int64) (image.Image, error) {
 
 func fetchUserAvatar(ctx *ext.Context, userID int64) (image.Image, error) {
 	inputPeer := ctx.PeerStorage.GetInputPeerById(userID)
+	log.Printf("fetchUserAvatar: userID=%d inputPeer=%T %+v", userID, inputPeer, inputPeer)
+	if inputPeer == nil {
+		log.Println("input peer is empty")
+		return nil, fmt.Errorf("input peer is empty")
+	}
 	inputUser, ok := toInputUser(inputPeer)
 	if !ok {
 		return nil, fmt.Errorf("cannot resolve user %d", userID)
@@ -141,10 +146,26 @@ func fetchUserAvatar(ctx *ext.Context, userID int64) (image.Image, error) {
 
 	bestSize := pickBestAvatarSize(photo.Sizes)
 	if bestSize == nil {
-		log.Printf("fetchUserAvatar: no suitable size found")
+		log.Printf("fetchUserAvatar: no suitable size found, available types: %v",
+			func() []string {
+				var types []string
+				for _, s := range photo.Sizes {
+					switch ps := s.(type) {
+					case *tg.PhotoSize:
+						types = append(types, ps.Type)
+					case *tg.PhotoSizeProgressive:
+						types = append(types, ps.Type+"(progressive)")
+					}
+				}
+				return types
+			}())
 		return nil, nil
 	}
-	// log.Printf("fetchUserAvatar: bestSize type=%s", bestSize.Type)
+	// if bestSize == nil {
+	// 	log.Printf("fetchUserAvatar: no suitable size found")
+	// 	return nil, nil
+	// }
+	log.Printf("fetchUserAvatar: bestSize type=%s", bestSize.Type)
 
 	location := &tg.InputPhotoFileLocation{
 		ID:            photo.ID,
