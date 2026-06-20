@@ -26,6 +26,7 @@ import (
 
 var (
 	chatStickerSetDb *sql.DB
+	quotesDb         *sql.DB
 	viperMutex       sync.RWMutex
 )
 
@@ -81,7 +82,7 @@ func main() {
 
 	_ = os.MkdirAll("./db", 0755)
 
-	chatStickerSetDb, err = database.InitDB("./db/chatStickerSet.db")
+	chatStickerSetDb, err = database.InitQuotesDB("./db/chatStickerSet.db")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -90,6 +91,16 @@ func main() {
 		log.Printf("failed to enable WAL: %v", err)
 	}
 	defer chatStickerSetDb.Close()
+
+	quotesDb, err = database.InitDB("./db/quotes.db")
+	if err != nil {
+		log.Fatal(err)
+	}
+	quotesDb.SetMaxOpenConns(1)
+	if _, err := quotesDb.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+		log.Printf("failed to enable WAL: %v", err)
+	}
+	defer quotesDb.Close()
 
 	client, err := gotgproto.NewClient(
 		// Get AppID from https://my.telegram.org/apps
@@ -119,10 +130,20 @@ func main() {
 		}()
 		return nil
 	}))
+
 	dispatcher.AddHandler(handlers.NewCommand("qs", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
 			if err := tgbot.HandleSaveSticker(ctx, update, chatStickerSetDb, client.Self.Username, botToken); err != nil {
 				log.Printf("sticker set error: %v", err)
+			}
+		}()
+		return nil
+	}))
+
+	dispatcher.AddHandler(handlers.NewCommand("qrand", func(ctx *ext.Context, update *ext.Update) error {
+		go func() {
+			if err := tgbot.HandleRandomQuotes(ctx, update, chatStickerSetDb, botToken); err != nil {
+				log.Printf("random quotes error: %v", err)
 			}
 		}()
 		return nil

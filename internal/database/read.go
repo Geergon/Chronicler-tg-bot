@@ -47,3 +47,27 @@ func GetOrCreatePackInfo(db *sql.DB, chatID int64, botUsername, chatName string)
 
 	return info, nil
 }
+
+func GetRandomQuote(db *sql.DB, chatID int64) (string, error) {
+	var fileID string
+	err := db.QueryRow(`
+        SELECT file_id FROM quotes
+        WHERE chat_id = ?
+        ORDER BY RANDOM()
+        LIMIT 1`,
+		chatID,
+	).Scan(&fileID)
+	return fileID, err
+}
+
+func GetRandomQuoteByAuthor(db *sql.DB, chatID, savedBy int64) (string, error) {
+	var fileID string
+	err := db.QueryRow(`
+        SELECT file_id FROM quotes
+        WHERE chat_id = ? AND saved_by = ?
+        ORDER BY RANDOM()
+        LIMIT 1`,
+		chatID, savedBy,
+	).Scan(&fileID)
+	return fileID, err
+}

@@ -28,3 +28,12 @@ func SaveOrUpdatePackInfo(db *sql.DB, chatID int64, info ChatPackInfo) error {
 	}
 	return nil
 }
+
+func SaveQuote(db *sql.DB, chatID, savedBy int64, fileID string) error {
+	_, err := db.Exec(`
+        INSERT INTO quotes (chat_id, file_id, saved_by)
+        VALUES (?, ?, ?)`,
+		chatID, fileID, savedBy,
+	)
+	return err
+}

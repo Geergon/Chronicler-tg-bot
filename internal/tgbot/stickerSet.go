@@ -275,6 +275,11 @@ func SendQuoteSticker(db *sql.DB, botToken, botUsername, chatName, userName stri
 	if err != nil {
 		return stickerLink, fmt.Errorf("sendSticker: %w", err)
 	}
+	err = database.SaveQuote(db, chatID, userID, lastSticker.FileID)
+	if err != nil {
+		log.Printf("failed to save quote in db: %v", err)
+		return "", err
+	}
 
 	return stickerLink, nil
 }
