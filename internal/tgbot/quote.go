@@ -54,13 +54,14 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 
 	location, _, err := fetchStickerFromMessage(ctx, replyMsg)
 	if err != nil {
-		log.Printf("failed to fetch sticker from message: %v", err)
-	}
-	sticker, err := downloadFile(ctx, location)
-	if err == nil {
-		media = append(media, sticker)
-	} else {
-		log.Printf("failed to download sticker from message: %v", err)
+		// log.Printf("failed to fetch sticker from message: %v", err)
+	} else if location != nil {
+		sticker, err := downloadFile(ctx, location)
+		if err == nil && sticker != nil {
+			media = append(media, sticker)
+		} else if err != nil {
+			log.Printf("failed to download sticker from message: %v", err)
+		}
 	}
 
 	author := resolveAuthor(replyMsg, replyUsers)
@@ -115,13 +116,12 @@ func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int,
 
 	location, _, err := fetchStickerFromMessage(ctx, replyMsg)
 	if err != nil {
-		log.Printf("failed to fetch sticker from message: %v", err)
-	}
-	if location != nil {
+		// log.Printf("failed to fetch sticker from message: %v", err)
+	} else if location != nil {
 		sticker, err := downloadFile(ctx, location)
 		if err == nil && sticker != nil {
 			media = append(media, sticker)
-		} else {
+		} else if err != nil {
 			log.Printf("failed to download sticker from message: %v", err)
 		}
 	}
