@@ -49,10 +49,16 @@ func fetchChatAvatar(ctx *ext.Context, chatID int64) (image.Image, error) {
 			return nil, nil
 		}
 
+		log.Printf("fetchChatAvatar: ChatPhoto type=%T", fullChat.ChatPhoto)
 		photo, ok = fullChat.ChatPhoto.(*tg.Photo)
 		if !ok {
-			log.Println("failed to get channel photo")
+			log.Printf("fetchChatAvatar: ChatPhoto is not *tg.Photo, got %T", fullChat.ChatPhoto)
 			return nil, nil
+		}
+
+		log.Printf("fetchChatAvatar: photo ID=%d sizes=%d", photo.ID, len(photo.Sizes))
+		for _, s := range photo.Sizes {
+			log.Printf("  size type=%T %+v", s, s)
 		}
 
 	case *tg.InputPeerChat:
@@ -108,6 +114,30 @@ func fetchUserAvatar(ctx *ext.Context, userID int64) (image.Image, error) {
 	inputUser, ok := toInputUser(inputPeer)
 	if !ok {
 		return nil, fmt.Errorf("cannot resolve user %d", userID)
+	}
+
+	fullUser, err := ctx.Raw.UsersGetFullUser(ctx, inputUser)
+	if err != nil {
+		log.Printf("UsersGetFullUser failed: %v, falling back to PhotosGetUserPhotos", err)
+	} else {
+		if photo, ok := fullUser.FullUser.ProfilePhoto.(*tg.Photo); ok {
+			bestSize := pickBestAvatarSize(photo.Sizes)
+			if bestSize != nil {
+				location := &tg.InputPhotoFileLocation{
+					ID:            photo.ID,
+					AccessHash:    photo.AccessHash,
+					FileReference: photo.FileReference,
+					ThumbSize:     bestSize.Type,
+				}
+				img, err := downloadFile(ctx, location)
+				if err == nil && img != nil {
+					return img, nil
+				}
+				log.Printf("downloadFile from UsersGetFullUser failed: %v", err)
+			}
+		} else {
+			log.Printf("fetchUserAvatar: ProfilePhoto type=%T for user %d", fullUser.FullUser.ProfilePhoto, userID)
+		}
 	}
 
 	photos, err := ctx.Raw.PhotosGetUserPhotos(ctx, &tg.PhotosGetUserPhotosRequest{
