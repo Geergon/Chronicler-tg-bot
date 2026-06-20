@@ -14,7 +14,7 @@ type MessageGroup struct {
 	GroupedID int64
 }
 
-func fetchMessage(ctx *ext.Context, chatID int64, msgID int) (*tg.Message, map[int64]*tg.User, map[int64]string, error) {
+func fetchMessage(ctx *ext.Context, chatID int64, msgID int) (*tg.Message, map[int64]*tg.User, map[int64]tg.ChatClass, error) {
 	inputPeer := ctx.PeerStorage.GetInputPeerById(chatID)
 	var msgClass tg.MessagesMessagesClass
 	var err error
@@ -78,19 +78,19 @@ func fetchMessage(ctx *ext.Context, chatID int64, msgID int) (*tg.Message, map[i
 		}
 	}
 
-	chatMap := make(map[int64]string)
+	chatMap := make(map[int64]tg.ChatClass)
 	for _, c := range chats {
 		switch ch := c.(type) {
 		case *tg.Chat:
-			chatMap[ch.ID] = ch.Title
+			chatMap[ch.ID] = ch
 		case *tg.Channel:
-			chatMap[ch.ID] = ch.Title
+			chatMap[ch.ID] = ch
 		}
 	}
 	return msg, userMap, chatMap, nil
 }
 
-func getMessageRange(ctx *ext.Context, chatID int64, startMsgID, count int) ([]MessageGroup, map[int64]*tg.User, map[int64]string, error) {
+func getMessageRange(ctx *ext.Context, chatID int64, startMsgID, count int) ([]MessageGroup, map[int64]*tg.User, map[int64]tg.ChatClass, error) {
 	if count <= 0 || count > 6 {
 		_, err := ctx.SendMessage(chatID, &tg.MessagesSendMessageRequest{
 			Message: "Вказана завелика кількість повідомлень для збереження. Максимальний ліміт це 6",
@@ -154,13 +154,13 @@ func getMessageRange(ctx *ext.Context, chatID int64, startMsgID, count int) ([]M
 		}
 	}
 
-	chatMap := make(map[int64]string)
+	chatMap := make(map[int64]tg.ChatClass)
 	for _, c := range chats {
 		switch ch := c.(type) {
 		case *tg.Chat:
-			chatMap[ch.ID] = ch.Title
+			chatMap[ch.ID] = ch
 		case *tg.Channel:
-			chatMap[ch.ID] = ch.Title
+			chatMap[ch.ID] = ch
 		}
 	}
 
@@ -211,7 +211,7 @@ func getMessageRange(ctx *ext.Context, chatID int64, startMsgID, count int) ([]M
 func resolveForwardAuthorFull(
 	fwd *tg.MessageFwdHeader,
 	userMap map[int64]*tg.User,
-	chatMap map[int64]string,
+	chatMap map[int64]tg.ChatClass,
 ) (MessageAuthor, bool) {
 	if fwd == nil {
 		return MessageAuthor{}, false
@@ -242,17 +242,27 @@ func resolveForwardAuthorFull(
 	case *tg.PeerChannel:
 		fwdAuthor = MessageAuthor{ID: peer.ChannelID}
 		id = peer.ChannelID
-		if title, ok := chatMap[peer.ChannelID]; ok {
-			name = title
+		if chat, ok := chatMap[peer.ChannelID]; ok {
+			name = getChatTitle(chat)
 		}
 		fwdAuthor.FirstName = name
 		fwdAuthor.ID = id
+	case *tg.PeerChat:
+		fwdAuthor = MessageAuthor{ID: peer.ChatID}
+
+		if chat, ok := chatMap[peer.ChatID]; ok {
+			fwdAuthor.FirstName = getChatTitle(chat)
+		}
 	}
+
 	return fwdAuthor, true
 }
 
 func GetCreatorID(ctx *ext.Context, chatID int64) (int64, error) {
 	inputPeer := ctx.PeerStorage.GetInputPeerById(chatID)
+	if inputPeer == nil {
+		return 0, fmt.Errorf("cannot find peer in storage")
+	}
 	inputChannel, ok := inputPeer.(*tg.InputPeerChannel)
 	if !ok {
 		return 0, fmt.Errorf("getCreatorID: it's not a channel or supergroup")
@@ -282,4 +292,16 @@ func GetCreatorID(ctx *ext.Context, chatID int64) (int64, error) {
 	}
 
 	return 0, fmt.Errorf("creator not found in admins list")
+}
+
+func getChatTitle(chat tg.ChatClass) string {
+	switch c := chat.(type) {
+	case *tg.Chat:
+		return c.Title
+
+	case *tg.Channel:
+		return c.Title
+	}
+
+	return ""
 }

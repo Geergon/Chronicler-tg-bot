@@ -193,3 +193,56 @@ func pickBestAvatarSize(sizes []tg.PhotoSizeClass) *tg.PhotoSize {
 	}
 	return nil
 }
+
+func GetAvatarLocationFromPeer(userMap map[int64]*tg.User, chatMap map[int64]tg.ChatClass, ctx *ext.Context, peerID int64) (tg.InputFileLocationClass, error) {
+	if u, ok := userMap[peerID]; ok && u.Photo != nil {
+		if userPhoto, ok := u.Photo.(*tg.UserProfilePhoto); ok {
+			inputPeer := ctx.PeerStorage.GetInputPeerById(peerID)
+			if !ok {
+				return nil, fmt.Errorf("failed to convert peer to input user")
+			}
+			if inputPeer == nil {
+				return nil, fmt.Errorf("peer not found")
+			}
+
+			return &tg.InputPeerPhotoFileLocation{
+				Peer:    inputPeer,
+				PhotoID: userPhoto.PhotoID,
+				Big:     false,
+			}, nil
+		}
+	}
+
+	if chat, ok := chatMap[peerID]; ok {
+		switch c := chat.(type) {
+		case *tg.Chat:
+			if photo, ok := c.Photo.(*tg.ChatPhoto); ok {
+				peer := ctx.PeerStorage.GetInputPeerById(peerID)
+				if peer == nil {
+					return nil, fmt.Errorf("peer not found")
+				}
+
+				return &tg.InputPeerPhotoFileLocation{
+					Peer:    peer,
+					PhotoID: photo.PhotoID,
+					Big:     false,
+				}, nil
+			}
+		case *tg.Channel:
+			if photo, ok := c.Photo.(*tg.ChatPhoto); ok {
+
+				peer := ctx.PeerStorage.GetInputPeerById(peerID)
+				if peer == nil {
+					return nil, fmt.Errorf("peer not found")
+				}
+
+				return &tg.InputPeerPhotoFileLocation{
+					Peer:    peer,
+					PhotoID: photo.PhotoID,
+					Big:     false,
+				}, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("no photo available for peer %d", peerID)
+}

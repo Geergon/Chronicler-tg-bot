@@ -94,7 +94,7 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 	return result, nil
 }
 
-func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int, replyMsg *tg.Message, replyUsers map[int64]*tg.User, replyChatMap map[int64]string) (*QuoteData, error) {
+func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int, replyMsg *tg.Message, replyUsers map[int64]*tg.User, replyChatMap map[int64]tg.ChatClass) (*QuoteData, error) {
 	resolveAuthor := func(msg *tg.Message, userMap map[int64]*tg.User) MessageAuthor {
 		peer, ok := msg.FromID.(*tg.PeerUser)
 		if !ok {
@@ -365,11 +365,23 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 
 		authorID := quoteData.Author.ID
 		avatar, cached := avatarCache[authorID]
+
 		if !cached {
-			avatar, err = fetchAvatar(ctx, authorID)
-			if err != nil {
-				log.Printf("fetchAvatar: %v", err)
+			location, err := GetAvatarLocationFromPeer(users, chatMap, ctx, authorID)
+
+			if err == nil && location != nil {
+				avatar, err = downloadFile(ctx, location)
+				if err != nil {
+					log.Printf("avatar download failed for user %d: %v", authorID, err)
+					avatar = nil
+				}
+			} else {
+				avatar, err = fetchAvatar(ctx, authorID)
+				if err != nil {
+					log.Printf("fetchAvatar error: %v", err)
+				}
 			}
+
 			avatarCache[authorID] = avatar
 		}
 

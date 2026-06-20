@@ -85,6 +85,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	chatStickerSetDb.SetMaxOpenConns(1)
+	if _, err := chatStickerSetDb.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+		log.Printf("failed to enable WAL: %v", err)
+	}
 	defer chatStickerSetDb.Close()
 
 	client, err := gotgproto.NewClient(
