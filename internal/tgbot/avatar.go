@@ -25,6 +25,7 @@ func fetchAvatar(ctx *ext.Context, id int64, username string, chatMap map[int64]
 
 	switch inputPeer.(type) {
 	case nil, *tg.InputPeerEmpty:
+		log.Printf("username == %s", username)
 		if username != "" {
 			return downloadImageFromURL(
 				fmt.Sprintf("https://telega.one/i/userpic/320/%s.jpg", username),

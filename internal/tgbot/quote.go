@@ -31,6 +31,17 @@ type QuoteData struct {
 
 func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteData, error) {
 	resolveAuthor := func(msg *tg.Message, userMap map[int64]*tg.User) MessageAuthor {
+		if msg == nil {
+			return MessageAuthor{}
+		}
+
+		if msg.FromID == nil {
+			return MessageAuthor{
+				ID:        0,
+				FirstName: "",
+			}
+		}
+
 		peer, ok := msg.FromID.(*tg.PeerUser)
 		if !ok {
 			return MessageAuthor{}
@@ -71,6 +82,11 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 	if ok && fwdAuthor.FirstName != "" {
 		author = fwdAuthor
 	}
+
+	if replyMsg == nil {
+		return nil, fmt.Errorf("reply message is nil")
+	}
+
 	result := &QuoteData{
 		Author:  author,
 		Text:    replyMsg.Message,
@@ -100,6 +116,16 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 
 func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int, replyMsg *tg.Message, replyUsers map[int64]*tg.User, replyChatMap map[int64]tg.ChatClass) (*QuoteData, error) {
 	resolveAuthor := func(msg *tg.Message, userMap map[int64]*tg.User) MessageAuthor {
+		if msg == nil {
+			log.Println("resolveAuthor: msg is nil")
+			return MessageAuthor{}
+		}
+		if msg.FromID == nil {
+			return MessageAuthor{
+				ID:        0,
+				FirstName: "",
+			}
+		}
 		peer, ok := msg.FromID.(*tg.PeerUser)
 		if !ok {
 			return MessageAuthor{}
