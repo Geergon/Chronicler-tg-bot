@@ -25,6 +25,8 @@ type QuoteData struct {
 	Text    string
 	Media   []image.Image
 	ReplyTo *QuoteData
+	ChatMap map[int64]tg.ChatClass
+	UserMap map[int64]*tg.User
 }
 
 func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteData, error) {
@@ -70,9 +72,11 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 		author = fwdAuthor
 	}
 	result := &QuoteData{
-		Author: author,
-		Text:   replyMsg.Message,
-		Media:  media,
+		Author:  author,
+		Text:    replyMsg.Message,
+		Media:   media,
+		UserMap: replyUsers,
+		ChatMap: replyChatMap,
 	}
 
 	innerReply, ok := replyMsg.ReplyTo.(*tg.MessageReplyHeader)
@@ -213,7 +217,7 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 			}
 		}
 
-		avatar, err := fetchAvatar(ctx, authorID)
+		avatar, err := fetchAvatar(ctx, authorID, quoteData.Author.Username, quoteData.ChatMap)
 		if err != nil {
 			log.Printf("fetchAvatar: %v", err)
 		}
@@ -379,8 +383,9 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 					log.Printf("avatar download failed for user %d: %v", authorID, err)
 					avatar = nil
 				}
-			} else {
-				avatar, err = fetchAvatar(ctx, authorID)
+			}
+			if avatar == nil {
+				avatar, err = fetchAvatar(ctx, authorID, quoteData.Author.Username, quoteData.ChatMap)
 				if err != nil {
 					log.Printf("fetchAvatar error: %v", err)
 				}

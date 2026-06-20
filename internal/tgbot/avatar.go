@@ -4,107 +4,93 @@ import (
 	"fmt"
 	"image"
 	"log"
+	"net/http"
 
 	"github.com/celestix/gotgproto/ext"
 	"github.com/gotd/td/tg"
 )
 
-func fetchAvatar(ctx *ext.Context, id int64) (image.Image, error) {
-	inputPeer := ctx.PeerStorage.GetInputPeerById(id)
-	if inputPeer == nil {
-		return nil, fmt.Errorf("cannot resolve peer %d", id)
+func fetchAvatar(ctx *ext.Context, id int64, username string, chatMap map[int64]tg.ChatClass) (image.Image, error) {
+	if chat, ok := chatMap[id]; ok {
+		img, err := fetchChatAvatarFromChatClass(ctx, chat)
+		if err != nil {
+			log.Printf("fetchChatAvatarFromChatClass: %v", err)
+		}
+		if img != nil {
+			return img, nil
+		}
 	}
 
+	inputPeer := ctx.PeerStorage.GetInputPeerById(id)
+
 	switch inputPeer.(type) {
+	case nil, *tg.InputPeerEmpty:
+		if username != "" {
+			return downloadImageFromURL(
+				fmt.Sprintf("https://telega.one/i/userpic/320/%s.jpg", username),
+			)
+		}
+		return nil, nil
+
 	case *tg.InputPeerUser, *tg.InputPeerSelf:
-		return fetchUserAvatar(ctx, id)
-	case *tg.InputPeerChannel, *tg.InputPeerChat:
-		return fetchChatAvatar(ctx, id)
+		return fetchUserAvatar(ctx, id, username)
+
+	// case *tg.InputPeerChannel, *tg.InputPeerChat:
+	// _ = peer
+	// 	return fetchChatAvatar(ctx, id)
+
 	default:
-		return nil, fmt.Errorf("unsupported peer type: %T", inputPeer)
+		log.Printf("fetchAvatar: unsupported peer type %T for id %d", inputPeer, id)
+		return nil, nil
 	}
 }
 
-func fetchChatAvatar(ctx *ext.Context, chatID int64) (image.Image, error) {
-	inputPeer := ctx.PeerStorage.GetInputPeerById(chatID)
-	if inputPeer == nil {
-		return nil, fmt.Errorf("cannot resolve chat %d", chatID)
-	}
+func fetchChatAvatarFromChatClass(ctx *ext.Context, chat tg.ChatClass) (image.Image, error) {
+	var photoClass tg.ChatPhotoClass
 
-	var photo *tg.Photo
-
-	switch peer := inputPeer.(type) {
-	case *tg.InputPeerChannel:
-		full, err := ctx.Raw.ChannelsGetFullChannel(ctx, &tg.InputChannel{
-			ChannelID:  peer.ChannelID,
-			AccessHash: peer.AccessHash,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("ChannelsGetFullChannel: %w", err)
-		}
-
-		fullChat, ok := full.FullChat.(*tg.ChannelFull)
-		if !ok {
-			log.Println("failed to get full info about channel")
-			return nil, nil
-		}
-
-		log.Printf("fetchChatAvatar: ChatPhoto type=%T", fullChat.ChatPhoto)
-		photo, ok = fullChat.ChatPhoto.(*tg.Photo)
-		if !ok {
-			log.Printf("fetchChatAvatar: ChatPhoto is not *tg.Photo, got %T", fullChat.ChatPhoto)
-			return nil, nil
-		}
-
-		log.Printf("fetchChatAvatar: photo ID=%d sizes=%d", photo.ID, len(photo.Sizes))
-		for _, s := range photo.Sizes {
-			log.Printf("  size type=%T %+v", s, s)
-		}
-
-	case *tg.InputPeerChat:
-		full, err := ctx.Raw.MessagesGetFullChat(ctx, peer.ChatID)
-		if err != nil {
-			return nil, fmt.Errorf("MessagesGetFullChat: %w", err)
-		}
-
-		fullChat, ok := full.FullChat.(*tg.ChatFull)
-		if !ok {
-			log.Println("failed to get full info about chat")
-			return nil, nil
-		}
-
-		photo, ok = fullChat.ChatPhoto.(*tg.Photo)
-		if !ok {
-			log.Println("failed to get chat photo")
-			return nil, nil
-		}
-
+	switch ch := chat.(type) {
+	case *tg.Channel:
+		photoClass = ch.Photo
+	case *tg.Chat:
+		photoClass = ch.Photo
 	default:
-		return nil, fmt.Errorf("unsupported peer type: %T", inputPeer)
-	}
-
-	if photo == nil {
-		log.Println("channel/chat avatar doesn't exist")
 		return nil, nil
 	}
 
-	bestSize := pickBestAvatarSize(photo.Sizes)
-	if bestSize == nil {
-		log.Println("failed to get bestsize for channel avatar")
+	if photoClass == nil {
 		return nil, nil
 	}
 
-	location := &tg.InputPhotoFileLocation{
-		ID:            photo.ID,
-		AccessHash:    photo.AccessHash,
-		FileReference: photo.FileReference,
-		ThumbSize:     bestSize.Type,
+	chatPhoto, ok := photoClass.(*tg.ChatPhoto)
+	if !ok {
+		return nil, nil
+	}
+
+	inputPeer := ctx.PeerStorage.GetInputPeerById(getPeerID(chat))
+	if inputPeer == nil {
+		return nil, nil
+	}
+
+	location := &tg.InputPeerPhotoFileLocation{
+		Peer:    inputPeer,
+		PhotoID: chatPhoto.PhotoID,
+		Big:     true, // big version (800px), false = small (160px)
 	}
 
 	return downloadFile(ctx, location)
 }
 
-func fetchUserAvatar(ctx *ext.Context, userID int64) (image.Image, error) {
+func getPeerID(chat tg.ChatClass) int64 {
+	switch ch := chat.(type) {
+	case *tg.Channel:
+		return ch.ID
+	case *tg.Chat:
+		return ch.ID
+	}
+	return 0
+}
+
+func fetchUserAvatar(ctx *ext.Context, userID int64, username string) (image.Image, error) {
 	inputPeer := ctx.PeerStorage.GetInputPeerById(userID)
 	log.Printf("fetchUserAvatar: userID=%d inputPeer=%T %+v", userID, inputPeer, inputPeer)
 	if inputPeer == nil {
@@ -115,99 +101,60 @@ func fetchUserAvatar(ctx *ext.Context, userID int64) (image.Image, error) {
 	if !ok {
 		return nil, fmt.Errorf("cannot resolve user %d", userID)
 	}
-
-	fullUser, err := ctx.Raw.UsersGetFullUser(ctx, inputUser)
-	if err != nil {
-		log.Printf("UsersGetFullUser failed: %v, falling back to PhotosGetUserPhotos", err)
-	} else {
-		if photo, ok := fullUser.FullUser.ProfilePhoto.(*tg.Photo); ok {
-			bestSize := pickBestAvatarSize(photo.Sizes)
-			if bestSize != nil {
-				location := &tg.InputPhotoFileLocation{
-					ID:            photo.ID,
-					AccessHash:    photo.AccessHash,
-					FileReference: photo.FileReference,
-					ThumbSize:     bestSize.Type,
+	if ok {
+		fullUser, err := ctx.Raw.UsersGetFullUser(ctx, inputUser)
+		if err == nil {
+			if user, ok := fullUser.Users[0].(*tg.User); ok {
+				if userPhoto, ok := user.Photo.(*tg.UserProfilePhoto); ok {
+					location := &tg.InputPeerPhotoFileLocation{
+						Peer:    inputPeer,
+						PhotoID: userPhoto.PhotoID,
+						Big:     true,
+					}
+					return downloadFile(ctx, location)
 				}
-				img, err := downloadFile(ctx, location)
-				if err == nil && img != nil {
-					return img, nil
-				}
-				log.Printf("downloadFile from UsersGetFullUser failed: %v", err)
 			}
-		} else {
-			log.Printf("fetchUserAvatar: ProfilePhoto type=%T for user %d", fullUser.FullUser.ProfilePhoto, userID)
+			if photo, ok := fullUser.FullUser.ProfilePhoto.(*tg.Photo); ok {
+				bestSize := pickBestAvatarSize(photo.Sizes)
+				if bestSize != nil {
+					img, err := downloadFile(ctx, &tg.InputPhotoFileLocation{
+						ID:            photo.ID,
+						AccessHash:    photo.AccessHash,
+						FileReference: photo.FileReference,
+						ThumbSize:     bestSize.Type,
+					})
+					if err == nil && img != nil {
+						return img, nil
+					}
+				}
+			}
 		}
 	}
 
-	photos, err := ctx.Raw.PhotosGetUserPhotos(ctx, &tg.PhotosGetUserPhotosRequest{
-		UserID: inputUser,
-		Offset: 0,
-		Limit:  1,
-	})
+	if username != "" {
+		url := fmt.Sprintf("https://telega.one/i/userpic/320/%s.jpg", username)
+		img, err := downloadImageFromURL(url)
+		if err == nil && img != nil {
+			log.Printf("fetchUserAvatar: got avatar from telega.one for @%s", username)
+			return img, nil
+		}
+	}
+
+	return nil, nil
+}
+
+func downloadImageFromURL(url string) (image.Image, error) {
+	resp, err := http.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("PhotosGetUserPhotos: %w", err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}
 
-	var photoList []tg.PhotoClass
-	switch p := photos.(type) {
-	case *tg.PhotosPhotos:
-		photoList = p.Photos
-	case *tg.PhotosPhotosSlice:
-		photoList = p.Photos
-	}
-
-	if len(photoList) == 0 {
-		log.Printf("fetchUserAvatar: no photos for user %d", userID)
-		return nil, nil
-	}
-
-	photo, ok := photoList[0].(*tg.Photo)
-	if !ok {
-		log.Printf("fetchUserAvatar: photo[0] is %T, not *tg.Photo", photoList[0])
-		return nil, nil
-	}
-
-	log.Printf("fetchUserAvatar: photo ID=%d sizes=%d", photo.ID, len(photo.Sizes))
-
-	for _, s := range photo.Sizes {
-		log.Printf("  size type=%T %+v", s, s)
-	}
-
-	bestSize := pickBestAvatarSize(photo.Sizes)
-	if bestSize == nil {
-		log.Printf("fetchUserAvatar: no suitable size found, available types: %v",
-			func() []string {
-				var types []string
-				for _, s := range photo.Sizes {
-					switch ps := s.(type) {
-					case *tg.PhotoSize:
-						types = append(types, ps.Type)
-					case *tg.PhotoSizeProgressive:
-						types = append(types, ps.Type+"(progressive)")
-					}
-				}
-				return types
-			}())
-		return nil, nil
-	}
-	// if bestSize == nil {
-	// 	log.Printf("fetchUserAvatar: no suitable size found")
-	// 	return nil, nil
-	// }
-	log.Printf("fetchUserAvatar: bestSize type=%s", bestSize.Type)
-
-	location := &tg.InputPhotoFileLocation{
-		ID:            photo.ID,
-		AccessHash:    photo.AccessHash,
-		FileReference: photo.FileReference,
-		ThumbSize:     bestSize.Type,
-	}
-
-	img, err := downloadFile(ctx, location)
-	if err != nil {
-		log.Printf("downloadFile failed user=%d photoID=%d err=%v", userID, photo.ID, err)
-	}
+	img, _, err := image.Decode(resp.Body)
 	return img, err
 }
 
@@ -262,7 +209,7 @@ func GetAvatarLocationFromPeer(userMap map[int64]*tg.User, chatMap map[int64]tg.
 			return &tg.InputPeerPhotoFileLocation{
 				Peer:    inputPeer,
 				PhotoID: userPhoto.PhotoID,
-				Big:     false,
+				Big:     true,
 			}, nil
 		}
 	}
@@ -279,7 +226,7 @@ func GetAvatarLocationFromPeer(userMap map[int64]*tg.User, chatMap map[int64]tg.
 				return &tg.InputPeerPhotoFileLocation{
 					Peer:    peer,
 					PhotoID: photo.PhotoID,
-					Big:     false,
+					Big:     true,
 				}, nil
 			}
 		case *tg.Channel:
@@ -293,7 +240,7 @@ func GetAvatarLocationFromPeer(userMap map[int64]*tg.User, chatMap map[int64]tg.
 				return &tg.InputPeerPhotoFileLocation{
 					Peer:    peer,
 					PhotoID: photo.PhotoID,
-					Big:     false,
+					Big:     true,
 				}, nil
 			}
 		}
