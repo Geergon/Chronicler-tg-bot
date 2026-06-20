@@ -123,7 +123,12 @@ func fetchMedia(ctx *ext.Context, msg *tg.Message) ([]image.Image, error) {
 
 	var images []image.Image
 	img, err := downloadFile(ctx, location)
-	images = append(images, img)
+	if err != nil {
+		return nil, err
+	}
+	if img != nil {
+		images = append(images, img)
+	}
 	return images, err
 }
 
