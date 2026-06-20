@@ -317,6 +317,7 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 	}
 
 	var chatMessages []render.ChatMessage
+	avatarCache := make(map[int64]image.Image)
 
 	for i, group := range groups {
 		mainMsg := group.Messages[0]
@@ -362,9 +363,14 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 		// 	media = append(media, imgs...)
 		// }
 
-		avatar, err := fetchAvatar(ctx, quoteData.Author.ID)
-		if err != nil {
-			log.Printf("fetchAvatar: %v", err)
+		authorID := quoteData.Author.ID
+		avatar, cached := avatarCache[authorID]
+		if !cached {
+			avatar, err = fetchAvatar(ctx, authorID)
+			if err != nil {
+				log.Printf("fetchAvatar: %v", err)
+			}
+			avatarCache[authorID] = avatar
 		}
 
 		chatMessages = append(chatMessages, render.ChatMessage{

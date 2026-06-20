@@ -250,3 +250,36 @@ func resolveForwardAuthorFull(
 	}
 	return fwdAuthor, true
 }
+
+func GetCreatorID(ctx *ext.Context, chatID int64) (int64, error) {
+	inputPeer := ctx.PeerStorage.GetInputPeerById(chatID)
+	inputChannel, ok := inputPeer.(*tg.InputPeerChannel)
+	if !ok {
+		return 0, fmt.Errorf("getCreatorID: it's not a channel or supergroup")
+	}
+
+	res, err := ctx.Raw.ChannelsGetParticipants(ctx, &tg.ChannelsGetParticipantsRequest{
+		Channel: &tg.InputChannel{
+			ChannelID:  inputChannel.ChannelID,
+			AccessHash: inputChannel.AccessHash,
+		},
+		Filter: &tg.ChannelParticipantsAdmins{},
+		Offset: 0,
+		Limit:  100,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to get participants: %w", err)
+	}
+
+	switch data := res.(type) {
+	case *tg.ChannelsChannelParticipants:
+		for _, participant := range data.Participants {
+			switch p := participant.(type) {
+			case *tg.ChannelParticipantCreator:
+				return p.UserID, nil
+			}
+		}
+	}
+
+	return 0, fmt.Errorf("creator not found in admins list")
+}

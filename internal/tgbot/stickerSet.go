@@ -67,10 +67,14 @@ func HandleSaveSticker(ctx *ext.Context, update *ext.Update, db *sql.DB, botUser
 
 	creatorID, found := database.GetCreatorIDFromDB(db, chatID)
 	if !found {
-		creatorID, err = database.GetCreatorID(ctx, chatID)
+		creatorID, err = GetCreatorID(ctx, chatID)
 		if err != nil {
 			log.Printf("getCreatorID failed: %v", err)
 			creatorID = userID
+		} else {
+			if err := database.SaveCreatorID(db, chatID, creatorID); err != nil {
+				log.Printf("saveCreatorID: %v", err)
+			}
 		}
 	}
 
