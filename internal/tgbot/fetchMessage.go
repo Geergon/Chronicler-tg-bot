@@ -10,8 +10,8 @@ import (
 )
 
 type MessageGroup struct {
-	Messages  []*tg.Message // одне або кілька (якщо альбом)
-	GroupedID int64         // 0 якщо не альбом
+	Messages  []*tg.Message
+	GroupedID int64
 }
 
 func fetchMessage(ctx *ext.Context, chatID int64, msgID int) (*tg.Message, map[int64]*tg.User, map[int64]string, error) {
@@ -214,7 +214,6 @@ func resolveForwardAuthorFull(
 	chatMap map[int64]string,
 ) (MessageAuthor, bool) {
 	if fwd == nil {
-		log.Println("fwd is nil")
 		return MessageAuthor{}, false
 	}
 
@@ -251,16 +250,3 @@ func resolveForwardAuthorFull(
 	}
 	return fwdAuthor, true
 }
-
-// func getChatAvatar(ctx *ext.Context, chatID int64) error {
-// 	chat, err := ctx.Raw.MessagesGetChats(ctx, []int64{chatID})
-// 	if err != nil {
-// 		return fmt.Errorf("failed to get channel/chat info: %v", err)
-// 	}
-//
-// 	var chatList []tg.ChatClass
-// 	switch data := chat.(type) {
-// 	case *tg.Message:
-// 		chatList = data.Chats
-// 	}
-// }

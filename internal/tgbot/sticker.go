@@ -12,16 +12,11 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-// func stickerSetName(userID int64, botUsername string) string {
-// 	// botUsername = strings.TrimPrefix(botUsername, "@")
-// 	return fmt.Sprintf("quotes_%d_by_%s", userID, botUsername)
-// }
-
 func imageToWebP(img image.Image) ([]byte, error) {
 	var buf bytes.Buffer
 	err := nativewebp.Encode(&buf, img, nil)
 	if err != nil {
-		log.Fatalf("Error encoding image to WebP: %v", err)
+		log.Printf("Error encoding image to WebP: %v\n", err)
 	}
 	return buf.Bytes(), nil
 }
