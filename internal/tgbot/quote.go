@@ -157,7 +157,7 @@ func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int,
 	return result, nil
 }
 
-func HandleQuote(ctx *ext.Context, update *ext.Update) error {
+func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 	msg := update.EffectiveMessage
 	if msg == nil {
 		return nil
@@ -187,11 +187,13 @@ func HandleQuote(ctx *ext.Context, update *ext.Update) error {
 		}
 
 		var replyInfo *render.ReplyInfo
-		if quoteData.ReplyTo != nil {
-			replyInfo = &render.ReplyInfo{
-				AuthorID:   quoteData.ReplyTo.Author.ID,
-				AuthorName: quoteData.ReplyTo.Author.FirstName,
-				Text:       quoteData.ReplyTo.Text,
+		if replyEnable {
+			if quoteData.ReplyTo != nil {
+				replyInfo = &render.ReplyInfo{
+					AuthorID:   quoteData.ReplyTo.Author.ID,
+					AuthorName: quoteData.ReplyTo.Author.FirstName,
+					Text:       quoteData.ReplyTo.Text,
+				}
 			}
 		}
 
@@ -265,7 +267,7 @@ func HandleQuote(ctx *ext.Context, update *ext.Update) error {
 			return err
 		}
 
-		messages, err := handleMessageStack(ctx, chatID, replyHeader.ReplyToMsgID, number, replyHeader)
+		messages, err := handleMessageStack(ctx, chatID, replyHeader.ReplyToMsgID, number, replyHeader, replyEnable)
 		if err != nil {
 			log.Printf("failed to handle messages stack: %v", err)
 			return err
@@ -304,7 +306,7 @@ func HandleQuote(ctx *ext.Context, update *ext.Update) error {
 	return nil
 }
 
-func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number int, replyHeader *tg.MessageReplyHeader) ([]render.ChatMessage, error) {
+func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number int, replyHeader *tg.MessageReplyHeader, replyEnable bool) ([]render.ChatMessage, error) {
 	if number == 0 {
 		return nil, fmt.Errorf("number is 0")
 	}
@@ -339,11 +341,13 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 		}
 
 		var replyInfo *render.ReplyInfo
-		if quoteData.ReplyTo != nil {
-			replyInfo = &render.ReplyInfo{
-				AuthorID:   quoteData.ReplyTo.Author.ID,
-				AuthorName: quoteData.ReplyTo.Author.FirstName,
-				Text:       quoteData.ReplyTo.Text,
+		if replyEnable {
+			if quoteData.ReplyTo != nil {
+				replyInfo = &render.ReplyInfo{
+					AuthorID:   quoteData.ReplyTo.Author.ID,
+					AuthorName: quoteData.ReplyTo.Author.FirstName,
+					Text:       quoteData.ReplyTo.Text,
+				}
 			}
 		}
 

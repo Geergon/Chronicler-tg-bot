@@ -124,7 +124,16 @@ func main() {
 
 	dispatcher.AddHandler(handlers.NewCommand("q", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
-			if err := tgbot.HandleQuote(ctx, update); err != nil {
+			if err := tgbot.HandleQuote(ctx, update, false); err != nil {
+				log.Printf("quote error: %v", err)
+			}
+		}()
+		return nil
+	}))
+
+	dispatcher.AddHandler(handlers.NewCommand("qr", func(ctx *ext.Context, update *ext.Update) error {
+		go func() {
+			if err := tgbot.HandleQuote(ctx, update, true); err != nil {
 				log.Printf("quote error: %v", err)
 			}
 		}()
