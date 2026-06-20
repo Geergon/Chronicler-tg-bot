@@ -154,6 +154,9 @@ func fetchUserAvatar(ctx *ext.Context, userID int64) (image.Image, error) {
 	}
 
 	img, err := downloadFile(ctx, location)
+	if err != nil {
+		log.Printf("downloadFile failed user=%d photoID=%d err=%v", userID, photo.ID, err)
+	}
 	return img, err
 }
 
