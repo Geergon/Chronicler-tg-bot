@@ -4,10 +4,19 @@ services:
   chronicler-tg-bot:
     # image: geergon/chronicler-tg-bot:latest
     build: .
+    container_name: chronicler-tg-bot
+    restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      APP_ID: ${APP_ID}
-      API_HASH: ${API_HASH}
-      BOT_TOKEN: ${BOT_TOKEN}
+      APP_ID: "${APP_ID:?Error: APP_ID not set in .env}"
+      API_HASH: "${API_HASH:?Error: API_HASH not set in .env}"
+      BOT_TOKEN: "${BOT_TOKEN:?Error: BOT_TOKEN not set in .env}"
     volumes:
       - ./config:/config:z
       - ./db:/db:z
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
