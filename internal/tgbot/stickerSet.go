@@ -227,7 +227,7 @@ func SendQuoteSticker(db *sql.DB, botToken, botUsername, chatName, userName stri
 			stickerLink = "https://t.me/addstickers/" + setName
 
 			_, err = botAPIRequest(botToken, "createNewStickerSet", map[string]string{
-				"user_id": fmt.Sprint(creatorID),
+				"user_id": fmt.Sprint(userID),
 				"name":    setName,
 				"title":   packInfo.Title,
 				"emojis":  "🖼",
