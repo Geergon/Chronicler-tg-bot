@@ -2,9 +2,11 @@ package tgbot
 
 import (
 	"fmt"
+	"image/color"
 	"log"
 	"sort"
 
+	"github.com/Geergon/Chronicler-tg-bot/internal/render"
 	"github.com/celestix/gotgproto/ext"
 	"github.com/gotd/td/tg"
 )
@@ -304,4 +306,141 @@ func getChatTitle(chat tg.ChatClass) string {
 	}
 
 	return ""
+}
+
+func parseEntities(text string, entities []tg.MessageEntityClass, defaultColor color.Color) []render.TextSegment {
+	if len(entities) == 0 || text == "" {
+		return []render.TextSegment{{Text: text, Color: defaultColor}}
+	}
+
+	runes := []rune(text)
+	runeLen := len(runes)
+
+	type runeStyle struct {
+		Bold          bool
+		Italic        bool
+		Mono          bool
+		Underline     bool
+		Strikethrough bool
+		Spoiler       bool
+		Mention       bool
+	}
+
+	styles := make([]runeStyle, runeLen)
+
+	for _, entity := range entities {
+		var offset, length int
+		var applyFn func(*runeStyle)
+
+		switch e := entity.(type) {
+		case *tg.MessageEntityBold:
+			offset, length = e.Offset, e.Length
+			applyFn = func(s *runeStyle) { s.Bold = true }
+		case *tg.MessageEntityItalic:
+			offset, length = e.Offset, e.Length
+			applyFn = func(s *runeStyle) { s.Italic = true }
+		case *tg.MessageEntityCode:
+			offset, length = e.Offset, e.Length
+			applyFn = func(s *runeStyle) { s.Mono = true }
+		case *tg.MessageEntityPre:
+			offset, length = e.Offset, e.Length
+			applyFn = func(s *runeStyle) { s.Mono = true }
+		case *tg.MessageEntityUnderline:
+			offset, length = e.Offset, e.Length
+			applyFn = func(s *runeStyle) { s.Underline = true }
+		case *tg.MessageEntityStrike:
+			offset, length = e.Offset, e.Length
+			applyFn = func(s *runeStyle) { s.Strikethrough = true }
+		case *tg.MessageEntitySpoiler:
+			offset, length = e.Offset, e.Length
+			applyFn = func(s *runeStyle) { s.Spoiler = true }
+		case *tg.MessageEntityMention, *tg.MessageEntityTextURL, *tg.MessageEntityURL:
+			switch em := entity.(type) {
+			case *tg.MessageEntityMention:
+				offset, length = em.Offset, em.Length
+			case *tg.MessageEntityTextURL:
+				offset, length = em.Offset, em.Length
+			case *tg.MessageEntityURL:
+				offset, length = em.Offset, em.Length
+			}
+			applyFn = func(s *runeStyle) { s.Mention = true }
+		default:
+			continue
+		}
+
+		utf16Start := offset
+		utf16End := offset + length
+		runeIdx := 0
+		utf16Idx := 0
+
+		startRune := -1
+		endRune := runeLen
+
+		for runeIdx < runeLen {
+			if utf16Idx == utf16Start {
+				startRune = runeIdx
+			}
+			if utf16Idx == utf16End {
+				endRune = runeIdx
+				break
+			}
+			r := runes[runeIdx]
+			if r >= 0x10000 {
+				utf16Idx += 2 // surrogate pair
+			} else {
+				utf16Idx++
+			}
+			runeIdx++
+		}
+		if startRune == -1 {
+			continue
+		}
+
+		for i := startRune; i < endRune && i < runeLen; i++ {
+			applyFn(&styles[i])
+		}
+	}
+
+	var segments []render.TextSegment
+	if runeLen == 0 {
+		return segments
+	}
+
+	start := 0
+	for i := 1; i <= runeLen; i++ {
+		if i == runeLen || styles[i] != styles[start] {
+			s := styles[start]
+			seg := render.TextSegment{
+				Text:          string(runes[start:i]),
+				Bold:          s.Bold,
+				Italic:        s.Italic,
+				Mono:          s.Mono,
+				Underline:     s.Underline,
+				Strikethrough: s.Strikethrough,
+				Spoiler:       s.Spoiler,
+			}
+
+			switch {
+			case s.Mono:
+				seg.Color = color.RGBA{88, 135, 167, 255} // #5887a7
+			case s.Mention:
+				seg.Color = color.RGBA{106, 183, 236, 255} // #6ab7ec
+			case s.Spoiler:
+				r, g, b, _ := defaultColor.RGBA()
+				seg.Color = color.RGBA{
+					R: uint8(r >> 8),
+					G: uint8(g >> 8),
+					B: uint8(b >> 8),
+					A: 38, // ~15% opacity
+				}
+			default:
+				seg.Color = defaultColor
+			}
+
+			segments = append(segments, seg)
+			start = i
+		}
+	}
+
+	return segments
 }

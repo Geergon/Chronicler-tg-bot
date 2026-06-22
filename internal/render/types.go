@@ -100,9 +100,19 @@ type Sizes struct {
 }
 
 type TextSegment struct {
-	Text   string
-	Bold   bool
-	Italic bool
-	Mono   bool
-	Color  color.Color
+	Text          string
+	Bold          bool
+	Italic        bool
+	Mono          bool
+	Color         color.Color
+	Underline     bool
+	Strikethrough bool
+	Spoiler       bool
+}
+
+type faceDecoration struct {
+	Underline     bool
+	Strikethrough bool
+	Spoiler       bool
+	Color         color.Color
 }

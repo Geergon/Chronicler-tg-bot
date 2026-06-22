@@ -35,6 +35,8 @@ var (
 	emojiImgCacheMu sync.Mutex
 )
 
+var faceDecorations sync.Map
+
 type token struct {
 	text     string
 	emojiImg image.Image
@@ -98,6 +100,15 @@ func tokenizeSegments(segments []TextSegment, fontSize float64, family, monoFami
 
 		fallbackFace := baseFamily.Face(fontSize, seg.Color, style)
 
+		if seg.Underline || seg.Strikethrough || seg.Spoiler {
+			faceDecorations.Store(fallbackFace, faceDecoration{
+				Underline:     seg.Underline,
+				Strikethrough: seg.Strikethrough,
+				Spoiler:       seg.Spoiler,
+				Color:         seg.Color,
+			})
+		}
+
 		var found []gomoji.Emoji
 		marked := gomoji.ReplaceEmojisWithFunc(seg.Text, func(e gomoji.Emoji) string {
 			found = append(found, e)
@@ -133,6 +144,16 @@ func tokenizeSegments(segments []TextSegment, fontSize float64, family, monoFami
 				if i == len(runes) || nextFamily != currentFamily {
 					chunk := string(runes[groupStart:i])
 					face := currentFamily.Face(fontSize*currentScale, seg.Color, style)
+
+					if seg.Underline || seg.Strikethrough || seg.Spoiler {
+						faceDecorations.Store(face, faceDecoration{
+							Underline:     seg.Underline,
+							Strikethrough: seg.Strikethrough,
+							Spoiler:       seg.Spoiler,
+							Color:         seg.Color,
+						})
+					}
+
 					tokens = append(tokens, token{text: chunk, face: face})
 					groupStart = i
 					if i < len(runes) {
@@ -258,9 +279,61 @@ func RenderRichText(segments []TextSegment, maxWidth, fontSize float64, family, 
 	ctx := canvas.NewContext(c)
 	ctx.DrawText(-bounds.X0, -bounds.Y0, text)
 
+	drawSpanDecorations(ctx, text, -bounds.X0, -bounds.Y0, fontSize)
+
 	img := rasterizer.Draw(c, canvas.DPMM(1.0), canvas.DefaultColorSpace)
 
 	return img, w, h, nil
+}
+
+func drawSpanDecorations(ctx *canvas.Context, text *canvas.Text, offsetX, offsetY, fontSize float64) {
+	for _, line := range text.GetLines() {
+		baselineY := offsetY - line.Y
+
+		for _, span := range line.Spans {
+			dec, ok := faceDecorations.Load(span.Face)
+			if !ok {
+				continue
+			}
+			d := dec.(faceDecoration)
+
+			spanX := offsetX + span.X
+			spanW := span.Width
+
+			if spanW <= 0 {
+				continue
+			}
+
+			if d.Strikethrough {
+				strikeY := baselineY - fontSize*(-0.07)
+				ctx.SetFillColor(d.Color)
+				ctx.DrawPath(spanX, strikeY, canvas.Rectangle(spanW, fontSize*0.04))
+				ctx.Fill()
+			}
+
+			if d.Underline {
+				underY := baselineY - fontSize*0.08
+				ctx.SetFillColor(d.Color)
+				ctx.DrawPath(spanX, underY, canvas.Rectangle(spanW, fontSize*0.06))
+				ctx.Fill()
+			}
+
+			if d.Spoiler {
+				r, g, b, _ := d.Color.RGBA()
+				spoilerCol := color.RGBA{
+					R: uint8(r >> 8),
+					G: uint8(g >> 8),
+					B: uint8(b >> 8),
+					A: 220, // ~85% opacity
+				}
+				blockH := fontSize * 1.1
+				blockY := baselineY - fontSize*0.85
+				ctx.SetFillColor(spoilerCol)
+				ctx.DrawPath(spanX, blockY, canvas.Rectangle(spanW, blockH))
+				ctx.Fill()
+			}
+		}
+	}
 }
 
 func shrinkWrapText(rtFactory func() *canvas.RichText, maxWidth float64) *canvas.Text {

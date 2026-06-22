@@ -21,12 +21,13 @@ type MessageAuthor struct {
 }
 
 type QuoteData struct {
-	Author  MessageAuthor
-	Text    string
-	Media   []image.Image
-	ReplyTo *QuoteData
-	ChatMap map[int64]tg.ChatClass
-	UserMap map[int64]*tg.User
+	Author   MessageAuthor
+	Text     string
+	Media    []image.Image
+	ReplyTo  *QuoteData
+	ChatMap  map[int64]tg.ChatClass
+	UserMap  map[int64]*tg.User
+	replyMsg *tg.Message
 }
 
 func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteData, error) {
@@ -88,11 +89,12 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 	}
 
 	result := &QuoteData{
-		Author:  author,
-		Text:    replyMsg.Message,
-		Media:   media,
-		UserMap: replyUsers,
-		ChatMap: replyChatMap,
+		Author:   author,
+		Text:     replyMsg.Message,
+		Media:    media,
+		UserMap:  replyUsers,
+		ChatMap:  replyChatMap,
+		replyMsg: replyMsg,
 	}
 
 	innerReply, ok := replyMsg.ReplyTo.(*tg.MessageReplyHeader)
@@ -256,9 +258,7 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 				AvatarImg:   avatar,
 				BubbleColor: color.RGBA{45, 40, 60, 255},
 				Media:       quoteData.Media,
-				Segments: []render.TextSegment{
-					{Text: text, Color: color.RGBA{255, 255, 255, 255}},
-				},
+				Segments:    parseEntities(text, quoteData.replyMsg.Entities, color.RGBA{255, 255, 255, 255}),
 			},
 		}
 
