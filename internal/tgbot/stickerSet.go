@@ -229,17 +229,33 @@ func SendQuoteSticker(db, quoteDB *sql.DB, botToken, botUsername, chatName, user
 			stickerLink = "https://t.me/addstickers/" + setName
 
 			_, err = botAPIRequest(botToken, "createNewStickerSet", map[string]string{
-				"user_id": fmt.Sprint(userID),
+				"user_id": fmt.Sprint(creatorID),
 				"name":    setName,
 				"title":   packInfo.Title,
 				"emojis":  "🖼",
 			}, "png_sticker", "sticker.webp", stickerBytes)
 			if err != nil {
-				log.Printf("createNewStickerSet error: %v", err)
-				if strings.Contains(err.Error(), "PEER_ID_INVALID") {
-					return "", fmt.Errorf("власник чату має написати боту /start: @%s", botUsername)
+				log.Printf("createNewStickerSet failed: userID=%d err=%v", creatorID, err)
+
+				if creatorID != userID {
+					log.Printf("retrying createNewStickerSet with userID=%d", userID)
+					_, err = botAPIRequest(botToken, "createNewStickerSet", map[string]string{
+						"user_id": fmt.Sprint(userID),
+						"name":    setName,
+						"title":   packInfo.Title,
+						"emojis":  "🖼",
+					}, "png_sticker", "sticker.webp", stickerBytes)
+					if err != nil {
+						log.Printf("createNewStickerSet with userID also failed: %v", err)
+					}
 				}
-				return "", fmt.Errorf("createNewStickerSet: %w", err)
+
+				if err != nil {
+					if strings.Contains(err.Error(), "PEER_ID_INVALID") {
+						return "", fmt.Errorf("createNewStickerSet PEER_ID_INVALID: %v", err)
+					}
+					return "", fmt.Errorf("createNewStickerSet: %w", err)
+				}
 			}
 
 			if err := database.SaveCreatorID(db, chatID, creatorID); err != nil {
