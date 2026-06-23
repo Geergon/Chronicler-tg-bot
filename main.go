@@ -122,7 +122,7 @@ func main() {
 
 	dispatcher := client.Dispatcher
 
-	dispatcher.AddHandler(handlers.NewCommand("q", func(ctx *ext.Context, update *ext.Update) error {
+	dispatcher.AddHandler(handlers.NewCommand("c", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
 			if err := tgbot.HandleQuote(ctx, update, false); err != nil {
 				log.Printf("quote error: %v", err)
@@ -131,7 +131,7 @@ func main() {
 		return nil
 	}))
 
-	dispatcher.AddHandler(handlers.NewCommand("qr", func(ctx *ext.Context, update *ext.Update) error {
+	dispatcher.AddHandler(handlers.NewCommand("cr", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
 			if err := tgbot.HandleQuote(ctx, update, true); err != nil {
 				log.Printf("quote error: %v", err)
@@ -140,7 +140,7 @@ func main() {
 		return nil
 	}))
 
-	dispatcher.AddHandler(handlers.NewCommand("qs", func(ctx *ext.Context, update *ext.Update) error {
+	dispatcher.AddHandler(handlers.NewCommand("cs", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
 			if err := tgbot.HandleSaveSticker(ctx, update, chatStickerSetDb, quotesDb, client.Self.Username, botToken); err != nil {
 				log.Printf("sticker set error: %v", err)
@@ -149,7 +149,7 @@ func main() {
 		return nil
 	}))
 
-	dispatcher.AddHandler(handlers.NewCommand("qrand", func(ctx *ext.Context, update *ext.Update) error {
+	dispatcher.AddHandler(handlers.NewCommand("crand", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
 			if err := tgbot.HandleRandomQuotes(ctx, update, quotesDb, botToken); err != nil {
 				log.Printf("random quotes error: %v", err)
@@ -158,7 +158,7 @@ func main() {
 		return nil
 	}))
 
-	dispatcher.AddHandler(handlers.NewCommand("qrsave", func(ctx *ext.Context, update *ext.Update) error {
+	dispatcher.AddHandler(handlers.NewCommand("crsave", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
 			if err := tgbot.SaveStickerSetInDB(ctx, update, quotesDb, botToken); err != nil {
 				log.Printf("save stickerset in db error: %v", err)
