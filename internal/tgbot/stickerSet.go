@@ -202,7 +202,7 @@ func SendQuoteSticker(db, quoteDB *sql.DB, botToken, botUsername, chatName, user
 	stickerLink := "https://t.me/addstickers/" + setName
 
 	log.Printf("chatID:%d, userID:%d, creatorID:%d", chatID, userID, creatorID)
-
+	log.Printf("addStickerToSet: userID=%d setName=%s", userID, setName)
 	_, addErr := botAPIRequest(botToken, "addStickerToSet", map[string]string{
 		"user_id": fmt.Sprint(userID),
 		"name":    setName,
@@ -210,6 +210,7 @@ func SendQuoteSticker(db, quoteDB *sql.DB, botToken, botUsername, chatName, user
 	}, "png_sticker", "sticker.webp", stickerBytes)
 
 	if addErr != nil {
+		log.Printf("addStickerToSet error: %v", addErr)
 		errStr := addErr.Error()
 
 		if strings.Contains(errStr, "PEER_ID_INVALID") ||
@@ -228,6 +229,7 @@ func SendQuoteSticker(db, quoteDB *sql.DB, botToken, botUsername, chatName, user
 			setName = packInfo.Name
 			stickerLink = "https://t.me/addstickers/" + setName
 
+			log.Printf("createNewStickerSet attempt 1: creatorID=%d setName=%s", creatorID, setName)
 			_, err = botAPIRequest(botToken, "createNewStickerSet", map[string]string{
 				"user_id": fmt.Sprint(creatorID),
 				"name":    setName,
