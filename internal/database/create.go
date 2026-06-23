@@ -37,7 +37,9 @@ CREATE TABLE IF NOT EXISTS quotes (
     chat_id     INTEGER NOT NULL,
     file_id     TEXT    NOT NULL,
     created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
-    saved_by    INTEGER NOT NULL DEFAULT 0
+    saved_by    INTEGER NOT NULL DEFAULT 0,
+
+		UNIQUE(chat_id, file_id)
 );`
 	_, err = db.Exec(createTable)
 	if err != nil {

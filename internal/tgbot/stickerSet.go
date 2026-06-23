@@ -24,7 +24,7 @@ type botAPIResponse struct {
 	Description string          `json:"description"`
 }
 
-func HandleSaveSticker(ctx *ext.Context, update *ext.Update, db *sql.DB, botUsername, botToken string) error {
+func HandleSaveSticker(ctx *ext.Context, update *ext.Update, db, quoteDB *sql.DB, botUsername, botToken string) error {
 	msg := update.EffectiveMessage
 	if msg == nil {
 		return nil
@@ -78,7 +78,7 @@ func HandleSaveSticker(ctx *ext.Context, update *ext.Update, db *sql.DB, botUser
 		}
 	}
 
-	stickerLink, err := SendQuoteSticker(db, botToken, botUsername, chatName, userName, chatID, userID, creatorID, stickerBytes)
+	stickerLink, err := SendQuoteSticker(db, quoteDB, botToken, botUsername, chatName, userName, chatID, userID, creatorID, stickerBytes)
 	if err != nil {
 		return fmt.Errorf("SendQuoteStickerFromBytes: %w", err)
 	}
@@ -184,7 +184,7 @@ func botAPIRequest(botToken, method string, fields map[string]string, fileField,
 	return apiResp.Result, nil
 }
 
-func SendQuoteSticker(db *sql.DB, botToken, botUsername, chatName, userName string, chatID, userID, creatorID int64, stickerBytes []byte) (string, error) {
+func SendQuoteSticker(db, quoteDB *sql.DB, botToken, botUsername, chatName, userName string, chatID, userID, creatorID int64, stickerBytes []byte) (string, error) {
 	absID := chatID
 	if absID < 0 {
 		absID = -absID
@@ -200,6 +200,8 @@ func SendQuoteSticker(db *sql.DB, botToken, botUsername, chatName, userName stri
 
 	setName := packInfo.Name
 	stickerLink := "https://t.me/addstickers/" + setName
+
+	log.Printf("chatID:%d, userID:%d, creatorID:%d", chatID, userID, creatorID)
 
 	_, addErr := botAPIRequest(botToken, "addStickerToSet", map[string]string{
 		"user_id": fmt.Sprint(userID),
@@ -233,6 +235,7 @@ func SendQuoteSticker(db *sql.DB, botToken, botUsername, chatName, userName stri
 				"emojis":  "🖼",
 			}, "png_sticker", "sticker.webp", stickerBytes)
 			if err != nil {
+				log.Printf("createNewStickerSet error: %v", err)
 				if strings.Contains(err.Error(), "PEER_ID_INVALID") {
 					return "", fmt.Errorf("власник чату має написати боту /start: @%s", botUsername)
 				}
@@ -268,14 +271,7 @@ func SendQuoteSticker(db *sql.DB, botToken, botUsername, chatName, userName stri
 
 	lastSticker := stickerSet.Stickers[len(stickerSet.Stickers)-1]
 
-	_, err = botAPIRequest(botToken, "sendSticker", map[string]string{
-		"chat_id": fmt.Sprint(chatID),
-		"sticker": lastSticker.FileID,
-	}, "", "", nil)
-	if err != nil {
-		return stickerLink, fmt.Errorf("sendSticker: %w", err)
-	}
-	err = database.SaveQuote(db, chatID, userID, lastSticker.FileID)
+	err = database.SaveQuote(quoteDB, chatID, userID, lastSticker.FileID)
 	if err != nil {
 		log.Printf("failed to save quote in db: %v", err)
 		return "", err

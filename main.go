@@ -82,7 +82,7 @@ func main() {
 
 	_ = os.MkdirAll("./db", 0755)
 
-	chatStickerSetDb, err = database.InitQuotesDB("./db/chatStickerSet.db")
+	chatStickerSetDb, err = database.InitDB("./db/chatStickerSet.db")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func main() {
 	}
 	defer chatStickerSetDb.Close()
 
-	quotesDb, err = database.InitDB("./db/quotes.db")
+	quotesDb, err = database.InitQuotesDB("./db/quotes.db")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func main() {
 
 	dispatcher.AddHandler(handlers.NewCommand("qs", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
-			if err := tgbot.HandleSaveSticker(ctx, update, chatStickerSetDb, client.Self.Username, botToken); err != nil {
+			if err := tgbot.HandleSaveSticker(ctx, update, chatStickerSetDb, quotesDb, client.Self.Username, botToken); err != nil {
 				log.Printf("sticker set error: %v", err)
 			}
 		}()
@@ -151,8 +151,17 @@ func main() {
 
 	dispatcher.AddHandler(handlers.NewCommand("qrand", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
-			if err := tgbot.HandleRandomQuotes(ctx, update, chatStickerSetDb, botToken); err != nil {
+			if err := tgbot.HandleRandomQuotes(ctx, update, quotesDb, botToken); err != nil {
 				log.Printf("random quotes error: %v", err)
+			}
+		}()
+		return nil
+	}))
+
+	dispatcher.AddHandler(handlers.NewCommand("qrsave", func(ctx *ext.Context, update *ext.Update) error {
+		go func() {
+			if err := tgbot.SaveStickerSetInDB(ctx, update, quotesDb, botToken); err != nil {
+				log.Printf("save stickerset in db error: %v", err)
 			}
 		}()
 		return nil
