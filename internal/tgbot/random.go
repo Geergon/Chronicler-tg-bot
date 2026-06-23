@@ -22,7 +22,7 @@ func HandleRandomQuotes(ctx *ext.Context, update *ext.Update, db *sql.DB, botTok
 	fileID, err := database.GetRandomQuote(db, chatID)
 	if err == sql.ErrNoRows {
 		_, _ = ctx.SendMessage(chatID, &tg.MessagesSendMessageRequest{
-			Message: "Цитат в базі даних ще немає. Зберігай їх через /qs, щоб бот міг їх надсилати",
+			Message: "Цитат в базі даних ще немає. Зберігай їх через /qs, щоб бот міг їх надсилати або введи /qrsave <посилання на стікерпак> (/qrsave https://t.me/addstickers/gl19bx1gpi_1001794828039_by_QuotLyBot), щоб додати будь-який стікерпак до бази даних рандомних цитат.",
 		})
 		return err
 	}
