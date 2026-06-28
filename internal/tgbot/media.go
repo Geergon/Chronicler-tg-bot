@@ -101,13 +101,13 @@ func fetchMedia(ctx *ext.Context, msg *tg.Message) ([]image.Image, error) {
 		return nil, nil
 	}
 
-	// log.Printf("fetchMedia: photo ID=%d sizes=%d", photo.ID, len(photo.Sizes))
-	// for _, s := range photo.Sizes {
-	// 	log.Printf(" media size type=%T %+v", s, s)
-	// }
+	log.Printf("fetchMedia: photo ID=%d sizes=%d", photo.ID, len(photo.Sizes))
+	for _, s := range photo.Sizes {
+		log.Printf(" media size type=%T %+v", s, s)
+	}
 
 	bestSize := pickBestPhotoSize(photo.Sizes)
-	// log.Printf("fetchMedia: bestSize=%s", bestSize)
+	log.Printf("fetchMedia: bestSize=%s", bestSize)
 	if bestSize == nil {
 		log.Printf("fetchMedia: no suitable size found")
 		return nil, nil
@@ -133,8 +133,8 @@ func fetchMedia(ctx *ext.Context, msg *tg.Message) ([]image.Image, error) {
 }
 
 func pickBestPhotoSize(sizes []tg.PhotoSizeClass) *tg.PhotoSize {
-	// preferred := []string{"m", "x"}
-	preferred := []string{"x"}
+	preferred := []string{"x", "m", "s"}
+	// preferred := []string{"x"}
 	sizeMap := make(map[string]*tg.PhotoSize)
 	for _, s := range sizes {
 		switch ps := s.(type) {
