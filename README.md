@@ -88,7 +88,7 @@ docker-compose down
 ```
 
 
-3. **Usage**:
+### Usage
 
 - `/c` — create a quote sticker from a message (in response to a message)
 - `/c N` — create a sticker with N messages in a row (maximum 6)
