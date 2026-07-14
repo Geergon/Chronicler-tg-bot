@@ -61,7 +61,6 @@ Environment Variables
     APP_ID: Telegram API ID (required).
     API_HASH: Telegram API hash (required).
     BOT_TOKEN: Telegram bot token from BotFather (required).
-    CHAT_ID: The chat ID where the bot will send media (required).
 
 Volumes
 
