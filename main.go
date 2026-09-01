@@ -131,7 +131,25 @@ func main() {
 		return nil
 	}))
 
+	dispatcher.AddHandler(handlers.NewCommand("q", func(ctx *ext.Context, update *ext.Update) error {
+		go func() {
+			if err := tgbot.HandleQuote(ctx, update, false); err != nil {
+				log.Printf("quote error: %v", err)
+			}
+		}()
+		return nil
+	}))
+
 	dispatcher.AddHandler(handlers.NewCommand("cr", func(ctx *ext.Context, update *ext.Update) error {
+		go func() {
+			if err := tgbot.HandleQuote(ctx, update, true); err != nil {
+				log.Printf("quote error: %v", err)
+			}
+		}()
+		return nil
+	}))
+
+	dispatcher.AddHandler(handlers.NewCommand("qr", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
 			if err := tgbot.HandleQuote(ctx, update, true); err != nil {
 				log.Printf("quote error: %v", err)
@@ -173,6 +191,23 @@ func main() {
 			Message: `
 Вас вітає бот літописець для створення цитат (стікерів) з повідомлень.
 Напишіть /q для створення цитати.
+`,
+		})
+		if err != nil {
+			log.Printf("Помилка надсилання повідомлення: %v", err)
+			return err
+		}
+		return nil
+	}))
+
+	dispatcher.AddHandler(handlers.NewCommand("chelp", func(ctx *ext.Context, u *ext.Update) error {
+		chatID := u.EffectiveChat().GetID()
+		_, err := ctx.SendMessage(chatID, &tg.MessagesSendMessageRequest{
+			Message: `
+/q або /c - створення цитати.
+/qr або /cr - створення цитати з реплаєм.
+/crand - надіслати рандомний стікер.
+/crsave - зберегти стікерпак в базу даних для рандомних стікерів.
 `,
 		})
 		if err != nil {
