@@ -5,5 +5,10 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.104"
+async-channel = "2.5.0"
+axum = { version = "0.8.9", features = ["multipart"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
 skia-safe = { version = "0.153.3", features = ["binary-cache", "textlayout"] }
+tokio = { version = "1.53.2", features = ["full"] }
 unicode-segmentation = "1.13.3"
