@@ -1,9 +1,18 @@
 version: "3.8"
 
 services:
+  renderer:
+    build: ./renderer
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
   chronicler-tg-bot:
     # image: geergon/chronicler-tg-bot:latest
-    build: .
+    build: ./bot
     container_name: chronicler-tg-bot
     restart: unless-stopped
     env_file:
@@ -12,6 +21,7 @@ services:
       APP_ID: "${APP_ID:?Error: APP_ID not set in .env}"
       API_HASH: "${API_HASH:?Error: API_HASH not set in .env}"
       BOT_TOKEN: "${BOT_TOKEN:?Error: BOT_TOKEN not set in .env}"
+      RENDERER_URL: http://renderer:8080
     volumes:
       - ./config:/config:z
       - ./db:/db:z
@@ -20,3 +30,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    depends_on:
+      renderer:
+        condition: service_healthy

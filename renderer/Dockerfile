@@ -5,11 +5,11 @@ ADD Cargo.toml Cargo.lock ./
 ADD src ./src
 RUN cargo build --release
 
-FROM gcr.io/distroless/cc-debian13
-RUN apt-get update && apt-get install -y libfontconfig1 libfreetype6 ca-certificates \
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y libfontconfig1 libfreetype6 ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=build /app/target/release/renderer /app/renderer
+COPY --from=builder /app/target/release/renderer /app/renderer
 COPY fonts ./fonts
 EXPOSE 8080
 CMD ["./renderer"]
