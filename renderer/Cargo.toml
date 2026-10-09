@@ -4,3 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.104"
+skia-safe = { version = "0.153.3", features = ["binary-cache", "textlayout"] }
+unicode-segmentation = "1.13.3"

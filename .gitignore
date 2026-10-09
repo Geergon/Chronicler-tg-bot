@@ -3,3 +3,4 @@ bot.log
 db
 out_chat_stack.png
 out.webp
+renderer/target/
