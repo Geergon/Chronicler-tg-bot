@@ -6,7 +6,7 @@ import (
 	"log"
 	"sort"
 
-	"github.com/Geergon/Chronicler-tg-bot/internal/render"
+	"github.com/Geergon/Chronicler-tg-bot/internal/renderclient"
 	"github.com/celestix/gotgproto/ext"
 	"github.com/gotd/td/tg"
 )
@@ -308,9 +308,9 @@ func getChatTitle(chat tg.ChatClass) string {
 	return ""
 }
 
-func parseEntities(text string, entities []tg.MessageEntityClass, defaultColor color.Color) []render.TextSegment {
+func parseEntities(text string, entities []tg.MessageEntityClass, defaultColor color.Color) []renderclient.Segment {
 	if len(entities) == 0 || text == "" {
-		return []render.TextSegment{{Text: text, Color: defaultColor}}
+		return []renderclient.Segment{{Text: text, Color: defaultColor}}
 	}
 
 	runes := []rune(text)
@@ -401,7 +401,7 @@ func parseEntities(text string, entities []tg.MessageEntityClass, defaultColor c
 		}
 	}
 
-	var segments []render.TextSegment
+	var segments []renderclient.Segment
 	if runeLen == 0 {
 		return segments
 	}
@@ -410,7 +410,7 @@ func parseEntities(text string, entities []tg.MessageEntityClass, defaultColor c
 	for i := 1; i <= runeLen; i++ {
 		if i == runeLen || styles[i] != styles[start] {
 			s := styles[start]
-			seg := render.TextSegment{
+			seg := renderclient.Segment{
 				Text:          string(runes[start:i]),
 				Bold:          s.Bold,
 				Italic:        s.Italic,
@@ -443,4 +443,37 @@ func parseEntities(text string, entities []tg.MessageEntityClass, defaultColor c
 	}
 
 	return segments
+}
+
+func adminTag(ctx *ext.Context, chatID, userID int64) string {
+	ch, ok := ctx.PeerStorage.GetInputPeerById(chatID).(*tg.InputPeerChannel)
+	if !ok {
+		return ""
+	}
+	user := ctx.PeerStorage.GetInputPeerById(userID)
+	if user == nil {
+		return ""
+	}
+
+	res, err := ctx.Raw.ChannelsGetParticipant(ctx, &tg.ChannelsGetParticipantRequest{
+		Channel:     &tg.InputChannel{ChannelID: ch.ChannelID, AccessHash: ch.AccessHash},
+		Participant: user,
+	})
+	if err != nil {
+		return ""
+	}
+
+	switch p := res.Participant.(type) {
+	case *tg.ChannelParticipantCreator:
+		if p.Rank != "" {
+			return p.Rank
+		}
+		return "owner"
+	case *tg.ChannelParticipantAdmin:
+		if p.Rank != "" {
+			return p.Rank
+		}
+		return "admin"
+	}
+	return ""
 }

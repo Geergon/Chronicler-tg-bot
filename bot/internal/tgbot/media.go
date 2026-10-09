@@ -1,9 +1,7 @@
 package tgbot
 
 import (
-	"bytes"
 	"fmt"
-	"image"
 	"log"
 	"sort"
 
@@ -11,7 +9,7 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-func fetchMediaGroup(ctx *ext.Context, chatID int64, msg *tg.Message) ([]image.Image, error) {
+func fetchMediaGroup(ctx *ext.Context, chatID int64, msg *tg.Message) ([][]byte, error) {
 	if msg.GroupedID == 0 {
 		return fetchMedia(ctx, msg)
 	}
@@ -70,7 +68,7 @@ func fetchMediaGroup(ctx *ext.Context, chatID int64, msg *tg.Message) ([]image.I
 		return groupMsgs[i].ID < groupMsgs[j].ID
 	})
 
-	var images []image.Image
+	var images [][]byte
 	for _, gm := range groupMsgs {
 		imgs, err := fetchMedia(ctx, gm)
 		if err != nil {
@@ -83,7 +81,7 @@ func fetchMediaGroup(ctx *ext.Context, chatID int64, msg *tg.Message) ([]image.I
 	return images, nil
 }
 
-func fetchMedia(ctx *ext.Context, msg *tg.Message) ([]image.Image, error) {
+func fetchMedia(ctx *ext.Context, msg *tg.Message) ([][]byte, error) {
 	if msg.Media == nil {
 		// log.Println("message doesn't contain media")
 		return nil, nil
@@ -107,7 +105,7 @@ func fetchMedia(ctx *ext.Context, msg *tg.Message) ([]image.Image, error) {
 	}
 
 	bestSize := pickBestPhotoSize(photo.Sizes)
-	log.Printf("fetchMedia: bestSize=%s", bestSize)
+	// log.Printf("fetchMedia: bestSize=%s", bestSize)
 	if bestSize == nil {
 		log.Printf("fetchMedia: no suitable size found")
 		return nil, nil
@@ -121,15 +119,11 @@ func fetchMedia(ctx *ext.Context, msg *tg.Message) ([]image.Image, error) {
 		ThumbSize:     bestSize.Type,
 	}
 
-	var images []image.Image
-	img, err := downloadFile(ctx, location)
+	data, err := downloadFile(ctx, location)
 	if err != nil {
 		return nil, err
 	}
-	if img != nil {
-		images = append(images, img)
-	}
-	return images, err
+	return [][]byte{data}, err
 }
 
 func pickBestPhotoSize(sizes []tg.PhotoSizeClass) *tg.PhotoSize {
@@ -141,6 +135,9 @@ func pickBestPhotoSize(sizes []tg.PhotoSizeClass) *tg.PhotoSize {
 		case *tg.PhotoSize:
 			sizeMap[ps.Type] = ps
 		case *tg.PhotoSizeProgressive:
+			if len(ps.Sizes) == 0 {
+				return nil
+			}
 			sizeMap[ps.Type] = &tg.PhotoSize{
 				Type: ps.Type,
 				W:    ps.W,
@@ -233,42 +230,6 @@ func downloadFileBytes(ctx *ext.Context, location tg.InputFileLocationClass) ([]
 	return buf, nil
 }
 
-func downloadFile(ctx *ext.Context, location tg.InputFileLocationClass) (image.Image, error) {
-	var buf []byte
-	offset := 0
-	limit := 512 * 1024 // 512KB
-
-	for {
-		result, err := ctx.Raw.UploadGetFile(ctx, &tg.UploadGetFileRequest{
-			Location: location,
-			Offset:   int64(offset),
-			Limit:    limit,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("UploadGetFile: %w", err)
-		}
-
-		file, ok := result.(*tg.UploadFile)
-		if !ok {
-			break
-		}
-
-		buf = append(buf, file.Bytes...)
-
-		if len(file.Bytes) < limit {
-			break
-		}
-		offset += len(file.Bytes)
-	}
-
-	if len(buf) == 0 {
-		return nil, nil
-	}
-
-	img, _, err := image.Decode(bytes.NewReader(buf))
-	if err != nil {
-		return nil, fmt.Errorf("image.Decode: %w", err)
-	}
-
-	return img, nil
+func downloadFile(ctx *ext.Context, location tg.InputFileLocationClass) ([]byte, error) {
+	return downloadFileBytes(ctx, location)
 }

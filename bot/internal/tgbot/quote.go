@@ -2,13 +2,12 @@ package tgbot
 
 import (
 	"fmt"
-	"image"
 	"image/color"
 	"log"
 	"strconv"
 	"strings"
 
-	"github.com/Geergon/Chronicler-tg-bot/internal/render"
+	"github.com/Geergon/Chronicler-tg-bot/internal/renderclient"
 	"github.com/celestix/gotgproto/ext"
 	"github.com/gotd/td/tg"
 )
@@ -23,7 +22,7 @@ type MessageAuthor struct {
 type QuoteData struct {
 	Author   MessageAuthor
 	Text     string
-	Media    []image.Image
+	Media    [][]byte
 	ReplyTo  *QuoteData
 	ChatMap  map[int64]tg.ChatClass
 	UserMap  map[int64]*tg.User
@@ -165,9 +164,10 @@ func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int,
 	}
 
 	result := &QuoteData{
-		Author: author,
-		Text:   replyMsg.Message,
-		Media:  media,
+		Author:   author,
+		Text:     replyMsg.Message,
+		Media:    media,
+		replyMsg: replyMsg,
 	}
 
 	innerReply, ok := replyMsg.ReplyTo.(*tg.MessageReplyHeader)
@@ -218,10 +218,10 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 			return fmt.Errorf("extractQuoteData nil")
 		}
 
-		var replyInfo *render.ReplyInfo
+		var replyInfo *renderclient.Reply
 		if replyEnable {
 			if quoteData.ReplyTo != nil {
-				replyInfo = &render.ReplyInfo{
+				replyInfo = &renderclient.Reply{
 					AuthorID:   quoteData.ReplyTo.Author.ID,
 					AuthorName: quoteData.ReplyTo.Author.FirstName,
 					Text:       quoteData.ReplyTo.Text,
@@ -231,8 +231,10 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 
 		// quoted text instead of actual text if user quoted part of the text in the /q command
 		text := quoteData.Text
+		entities := parseEntities(text, quoteData.replyMsg.Entities, color.RGBA{255, 255, 255, 255})
 		if replyHeader.Quote && replyHeader.QuoteText != "" {
 			text = replyHeader.QuoteText
+			entities = parseEntities(text, nil, color.RGBA{255, 255, 255, 255})
 		}
 
 		authorID := quoteData.Author.ID
@@ -250,45 +252,21 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 			log.Printf("fetchAvatar: %v", err)
 		}
 
-		messages := []render.ChatMessage{
+		messages := []renderclient.Message{
 			{
 				AuthorID:    authorID,
 				AuthorName:  authorName,
+				AdminTag:    adminTag(ctx, chatID, userID),
 				Reply:       replyInfo,
-				AvatarImg:   avatar,
+				Avatar:      avatar,
 				BubbleColor: color.RGBA{45, 40, 60, 255},
 				Media:       quoteData.Media,
-				Segments:    parseEntities(text, quoteData.replyMsg.Entities, color.RGBA{255, 255, 255, 255}),
+				Segments:    entities,
 			},
 		}
 
-		sticker, err := render.BuildStickerChatStack(messages)
-		if err != nil {
-			return fmt.Errorf("BuildStickerChatStack: %w", err)
-		}
+		return renderAndSend(ctx, chatID, messages)
 
-		buffs, err := imageToWebP(sticker.Image())
-		if err != nil {
-			log.Printf("imageToWebP error: %v", err)
-			return err
-		}
-		docClass, err := uploadMedia(ctx, chatID, buffs, "image/webp")
-		if err != nil {
-			log.Printf("uploadMedia error: %v", err)
-			return err
-		}
-		doc, ok := docClass.(*tg.Document)
-		if !ok {
-			return fmt.Errorf("unexpected doc type: %T", docClass)
-		}
-
-		err = sendStickerToChat(ctx, chatID, doc)
-		if err != nil {
-			log.Printf("sendStickerToChat error: %v", err)
-			return err
-		}
-
-		return nil
 	} else if len(args) == 2 {
 		numberString := args[1]
 		number, err := strconv.Atoi(numberString)
@@ -303,40 +281,15 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 			return err
 		}
 
-		sticker, err := render.BuildStickerChatStack(messages)
-		if err != nil {
-			return fmt.Errorf("BuildStickerChatStack: %w", err)
-		}
-
-		buffs, err := imageToWebP(sticker.Image())
-		if err != nil {
-			log.Printf("imageToWebP error: %v", err)
-			return err
-		}
-		docClass, err := uploadMedia(ctx, chatID, buffs, "image/webp")
-		if err != nil {
-			log.Printf("uploadMedia error: %v", err)
-			return err
-		}
-		doc, ok := docClass.(*tg.Document)
-		if !ok {
-			return fmt.Errorf("unexpected doc type: %T", docClass)
-		}
-
-		err = sendStickerToChat(ctx, chatID, doc)
-		if err != nil {
-			log.Printf("sendStickerToChat error: %v", err)
-			return err
-		}
+		return renderAndSend(ctx, chatID, messages)
 
 	} else {
 		log.Println("too many arguments in /q command")
 		return nil
 	}
-	return nil
 }
 
-func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number int, replyHeader *tg.MessageReplyHeader, replyEnable bool) ([]render.ChatMessage, error) {
+func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number int, replyHeader *tg.MessageReplyHeader, replyEnable bool) ([]renderclient.Message, error) {
 	if number == 0 {
 		return nil, fmt.Errorf("number is 0")
 	}
@@ -348,8 +301,10 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 		return nil, fmt.Errorf("no messages found")
 	}
 
-	var chatMessages []render.ChatMessage
-	avatarCache := make(map[int64]image.Image)
+	var chatMessages []renderclient.Message
+	avatarCache := make(map[int64][]byte)
+	var avatar []byte
+	var cached bool
 
 	for i, group := range groups {
 		mainMsg := group.Messages[0]
@@ -359,21 +314,21 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 			return nil, fmt.Errorf("extractQuoteData: %w", err)
 		}
 		if quoteData == nil {
-			return nil, fmt.Errorf("extractQuoteData: %w", err)
+			return nil, fmt.Errorf("extractQuoteData error: quoteData is nil")
 		}
 
 		if isMediaOnly(quoteData) {
-			chatMessages = append(chatMessages, render.ChatMessage{
+			chatMessages = append(chatMessages, renderclient.Message{
 				Standalone: true,
 				Media:      quoteData.Media,
 			})
 			continue
 		}
 
-		var replyInfo *render.ReplyInfo
+		var replyInfo *renderclient.Reply
 		if replyEnable {
 			if quoteData.ReplyTo != nil {
-				replyInfo = &render.ReplyInfo{
+				replyInfo = &renderclient.Reply{
 					AuthorID:   quoteData.ReplyTo.Author.ID,
 					AuthorName: quoteData.ReplyTo.Author.FirstName,
 					Text:       quoteData.ReplyTo.Text,
@@ -383,8 +338,10 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 
 		// quoted text instead of actual text if user quoted part of the text in the /q command
 		text := quoteData.Text
+		entities := parseEntities(text, quoteData.replyMsg.Entities, color.RGBA{255, 255, 255, 255})
 		if replyHeader.Quote && replyHeader.QuoteText != "" && i == 0 {
 			text = replyHeader.QuoteText
+			entities = parseEntities(text, nil, color.RGBA{255, 255, 255, 255})
 		}
 
 		// var media []image.Image
@@ -398,7 +355,7 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 		// }
 
 		authorID := quoteData.Author.ID
-		avatar, cached := avatarCache[authorID]
+		avatar, cached = avatarCache[authorID]
 
 		if !cached {
 			location, err := GetAvatarLocationFromPeer(users, chatMap, ctx, authorID)
@@ -420,16 +377,15 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 			avatarCache[authorID] = avatar
 		}
 
-		chatMessages = append(chatMessages, render.ChatMessage{
+		chatMessages = append(chatMessages, renderclient.Message{
 			AuthorID:    quoteData.Author.ID,
 			AuthorName:  quoteData.Author.FirstName,
-			AvatarImg:   avatar,
+			Avatar:      avatar,
+			AdminTag:    adminTag(ctx, chatID, quoteData.Author.ID),
 			Reply:       replyInfo,
 			BubbleColor: color.RGBA{45, 40, 60, 255},
 			Media:       quoteData.Media,
-			Segments: []render.TextSegment{
-				{Text: text, Color: color.RGBA{255, 255, 255, 255}},
-			},
+			Segments:    entities,
 		})
 	}
 

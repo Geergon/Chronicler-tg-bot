@@ -2,15 +2,16 @@ package tgbot
 
 import (
 	"fmt"
-	"image"
+	"io"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/celestix/gotgproto/ext"
 	"github.com/gotd/td/tg"
 )
 
-func fetchAvatar(ctx *ext.Context, id int64, username string, chatMap map[int64]tg.ChatClass) (image.Image, error) {
+func fetchAvatar(ctx *ext.Context, id int64, username string, chatMap map[int64]tg.ChatClass) ([]byte, error) {
 	if chat, ok := chatMap[id]; ok {
 		img, err := fetchChatAvatarFromChatClass(ctx, chat)
 		if err != nil {
@@ -46,7 +47,7 @@ func fetchAvatar(ctx *ext.Context, id int64, username string, chatMap map[int64]
 	}
 }
 
-func fetchChatAvatarFromChatClass(ctx *ext.Context, chat tg.ChatClass) (image.Image, error) {
+func fetchChatAvatarFromChatClass(ctx *ext.Context, chat tg.ChatClass) ([]byte, error) {
 	var photoClass tg.ChatPhotoClass
 
 	switch ch := chat.(type) {
@@ -91,7 +92,7 @@ func getPeerID(chat tg.ChatClass) int64 {
 	return 0
 }
 
-func fetchUserAvatar(ctx *ext.Context, userID int64, username string) (image.Image, error) {
+func fetchUserAvatar(ctx *ext.Context, userID int64, username string) ([]byte, error) {
 	inputPeer := ctx.PeerStorage.GetInputPeerById(userID)
 	log.Printf("fetchUserAvatar: userID=%d inputPeer=%T %+v", userID, inputPeer, inputPeer)
 	if inputPeer == nil {
@@ -102,31 +103,30 @@ func fetchUserAvatar(ctx *ext.Context, userID int64, username string) (image.Ima
 	if !ok {
 		return nil, fmt.Errorf("cannot resolve user %d", userID)
 	}
-	if ok {
-		fullUser, err := ctx.Raw.UsersGetFullUser(ctx, inputUser)
-		if err == nil {
-			if user, ok := fullUser.Users[0].(*tg.User); ok {
-				if userPhoto, ok := user.Photo.(*tg.UserProfilePhoto); ok {
-					location := &tg.InputPeerPhotoFileLocation{
-						Peer:    inputPeer,
-						PhotoID: userPhoto.PhotoID,
-						Big:     true,
-					}
-					return downloadFile(ctx, location)
+
+	fullUser, err := ctx.Raw.UsersGetFullUser(ctx, inputUser)
+	if err == nil {
+		if user, ok := fullUser.Users[0].(*tg.User); ok {
+			if userPhoto, ok := user.Photo.(*tg.UserProfilePhoto); ok {
+				location := &tg.InputPeerPhotoFileLocation{
+					Peer:    inputPeer,
+					PhotoID: userPhoto.PhotoID,
+					Big:     true,
 				}
+				return downloadFile(ctx, location)
 			}
-			if photo, ok := fullUser.FullUser.ProfilePhoto.(*tg.Photo); ok {
-				bestSize := pickBestAvatarSize(photo.Sizes)
-				if bestSize != nil {
-					img, err := downloadFile(ctx, &tg.InputPhotoFileLocation{
-						ID:            photo.ID,
-						AccessHash:    photo.AccessHash,
-						FileReference: photo.FileReference,
-						ThumbSize:     bestSize.Type,
-					})
-					if err == nil && img != nil {
-						return img, nil
-					}
+		}
+		if photo, ok := fullUser.FullUser.ProfilePhoto.(*tg.Photo); ok {
+			bestSize := pickBestAvatarSize(photo.Sizes)
+			if bestSize != nil {
+				img, err := downloadFile(ctx, &tg.InputPhotoFileLocation{
+					ID:            photo.ID,
+					AccessHash:    photo.AccessHash,
+					FileReference: photo.FileReference,
+					ThumbSize:     bestSize.Type,
+				})
+				if err == nil && img != nil {
+					return img, nil
 				}
 			}
 		}
@@ -144,7 +144,7 @@ func fetchUserAvatar(ctx *ext.Context, userID int64, username string) (image.Ima
 	return nil, nil
 }
 
-func downloadImageFromURL(url string) (image.Image, error) {
+func downloadImageFromURL(url string) ([]byte, error) {
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -154,9 +154,10 @@ func downloadImageFromURL(url string) (image.Image, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}
-
-	img, _, err := image.Decode(resp.Body)
-	return img, err
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "image/") {
+		return nil, fmt.Errorf("unexpected content type %q", ct)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 5<<20))
 }
 
 func toInputUser(peer tg.InputPeerClass) (tg.InputUserClass, bool) {
@@ -180,6 +181,9 @@ func pickBestAvatarSize(sizes []tg.PhotoSizeClass) *tg.PhotoSize {
 		case *tg.PhotoSize:
 			sizeMap[ps.Type] = ps
 		case *tg.PhotoSizeProgressive:
+			if len(ps.Sizes) == 0 {
+				return nil
+			}
 			sizeMap[ps.Type] = &tg.PhotoSize{
 				Type: ps.Type,
 				W:    ps.W,
@@ -200,9 +204,6 @@ func GetAvatarLocationFromPeer(userMap map[int64]*tg.User, chatMap map[int64]tg.
 	if u, ok := userMap[peerID]; ok && u.Photo != nil {
 		if userPhoto, ok := u.Photo.(*tg.UserProfilePhoto); ok {
 			inputPeer := ctx.PeerStorage.GetInputPeerById(peerID)
-			if !ok {
-				return nil, fmt.Errorf("failed to convert peer to input user")
-			}
 			if inputPeer == nil {
 				return nil, fmt.Errorf("peer not found")
 			}
