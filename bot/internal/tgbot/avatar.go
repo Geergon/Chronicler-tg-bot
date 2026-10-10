@@ -6,10 +6,89 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/celestix/gotgproto/ext"
 	"github.com/gotd/td/tg"
 )
+
+type avatarCache struct {
+	mu sync.Mutex
+	m  map[int64][]byte // key: PhotoID
+}
+
+var avatars = &avatarCache{m: map[int64][]byte{}}
+
+const maxCachedAvatars = 300
+
+func (c *avatarCache) get(k int64) ([]byte, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	b, ok := c.m[k]
+	return b, ok
+}
+
+func (c *avatarCache) put(k int64, v []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.m) >= maxCachedAvatars {
+		clear(c.m)
+	}
+	c.m[k] = v
+}
+
+func avatarPhotoID(users map[int64]*tg.User, chats map[int64]tg.ChatClass, id int64) int64 {
+	if u, ok := users[id]; ok {
+		if p, ok := u.Photo.(*tg.UserProfilePhoto); ok {
+			return p.PhotoID
+		}
+	}
+	switch c := chats[id].(type) {
+	case *tg.Channel:
+		if p, ok := c.Photo.(*tg.ChatPhoto); ok {
+			return p.PhotoID
+		}
+	case *tg.Chat:
+		if p, ok := c.Photo.(*tg.ChatPhoto); ok {
+			return p.PhotoID
+		}
+	}
+	return 0
+}
+
+// single entry point for both modes (/q and /q N)
+func getAvatar(ctx *ext.Context, id int64, username string,
+	users map[int64]*tg.User, chats map[int64]tg.ChatClass) []byte {
+
+	pid := avatarPhotoID(users, chats, id)
+	if pid != 0 {
+		if b, ok := avatars.get(pid); ok {
+			return b
+		}
+	}
+
+	var avatar []byte
+	if loc, err := GetAvatarLocationFromPeer(users, chats, ctx, id); err == nil && loc != nil {
+		if b, err := downloadFile(ctx, loc); err == nil {
+			avatar = b
+		} else {
+			log.Printf("avatar download failed for %d: %v", id, err)
+		}
+	}
+	if avatar == nil {
+		b, err := fetchAvatar(ctx, id, username, chats)
+		if err != nil {
+			log.Printf("fetchAvatar error: %v", err)
+		}
+		avatar = b
+	}
+
+	if avatar != nil && pid != 0 {
+		avatars.put(pid, avatar)
+	}
+	return avatar
+}
 
 func fetchAvatar(ctx *ext.Context, id int64, username string, chatMap map[int64]tg.ChatClass) ([]byte, error) {
 	if chat, ok := chatMap[id]; ok {
@@ -94,7 +173,7 @@ func getPeerID(chat tg.ChatClass) int64 {
 
 func fetchUserAvatar(ctx *ext.Context, userID int64, username string) ([]byte, error) {
 	inputPeer := ctx.PeerStorage.GetInputPeerById(userID)
-	log.Printf("fetchUserAvatar: userID=%d inputPeer=%T %+v", userID, inputPeer, inputPeer)
+	log.Printf("fetchUserAvatar: userID=%d inputPeer=%T", userID, inputPeer)
 	if inputPeer == nil {
 		log.Println("input peer is empty")
 		return nil, fmt.Errorf("input peer is empty")
@@ -106,7 +185,14 @@ func fetchUserAvatar(ctx *ext.Context, userID int64, username string) ([]byte, e
 
 	fullUser, err := ctx.Raw.UsersGetFullUser(ctx, inputUser)
 	if err == nil {
-		if user, ok := fullUser.Users[0].(*tg.User); ok {
+		var user *tg.User
+		for _, u := range fullUser.Users {
+			if uu, ok := u.(*tg.User); ok && uu.ID == userID {
+				user = uu
+				break
+			}
+		}
+		if user != nil {
 			if userPhoto, ok := user.Photo.(*tg.UserProfilePhoto); ok {
 				location := &tg.InputPeerPhotoFileLocation{
 					Peer:    inputPeer,
@@ -145,7 +231,8 @@ func fetchUserAvatar(ctx *ext.Context, userID int64, username string) ([]byte, e
 }
 
 func downloadImageFromURL(url string) ([]byte, error) {
-	resp, err := http.Get(url)
+	var httpClient = &http.Client{Timeout: 10 * time.Second}
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}

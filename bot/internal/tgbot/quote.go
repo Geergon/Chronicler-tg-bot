@@ -15,6 +15,7 @@ import (
 type MessageAuthor struct {
 	ID        int64
 	FirstName string
+	LastName  string
 	Username  string
 	IsBot     bool
 	Rank      string
@@ -54,23 +55,24 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 		}
 		if u, ok := userMap[peer.UserID]; ok {
 			a.FirstName = u.FirstName
+			a.LastName = u.LastName
 			a.Username = u.Username
 			a.IsBot = u.Bot
 		}
 		return a
 	}
 
-	replyMsg, replyUsers, replyChatMap, err := fetchMessage(ctx, chatID, replyToMsgID)
-	if err != nil || replyMsg == nil {
+	msg, users, chats, err := fetchMessage(ctx, chatID, replyToMsgID)
+	if err != nil || msg == nil {
 		return nil, err
 	}
 
-	media, err := fetchMediaGroup(ctx, chatID, replyMsg)
-	if err != nil || replyMsg == nil {
-		return nil, err
+	media, err := fetchMediaGroup(ctx, chatID, msg)
+	if err != nil {
+		log.Printf("fetchMediaGroup: %v", err)
 	}
 
-	location, _, err := fetchStickerFromMessage(ctx, replyMsg)
+	location, _, err := fetchStickerFromMessage(ctx, msg)
 	if err != nil {
 		// log.Printf("failed to fetch sticker from message: %v", err)
 	} else if location != nil {
@@ -82,27 +84,23 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 		}
 	}
 
-	author := resolveAuthor(replyMsg, replyUsers)
-	fwdAuthor, ok := resolveForwardAuthorFull(&replyMsg.FwdFrom, replyUsers, replyChatMap)
+	author := resolveAuthor(msg, users)
+	fwdAuthor, ok := resolveForwardAuthorFull(&msg.FwdFrom, users, chats)
 	if ok && fwdAuthor.FirstName != "" {
 		author = fwdAuthor
 		author.Forwarded = true
 	}
 
-	if replyMsg == nil {
-		return nil, fmt.Errorf("reply message is nil")
-	}
-
 	result := &QuoteData{
 		Author:   author,
-		Text:     replyMsg.Message,
+		Text:     msg.Message,
 		Media:    media,
-		UserMap:  replyUsers,
-		ChatMap:  replyChatMap,
-		replyMsg: replyMsg,
+		UserMap:  users,
+		ChatMap:  chats,
+		replyMsg: msg,
 	}
 
-	innerReply, ok := replyMsg.ReplyTo.(*tg.MessageReplyHeader)
+	innerReply, ok := msg.ReplyTo.(*tg.MessageReplyHeader)
 	if ok && innerReply != nil && innerReply.ReplyToMsgID != 0 {
 		innerMsg, innerUsers, _, err := fetchMessage(ctx, chatID, innerReply.ReplyToMsgID)
 		author := resolveAuthor(innerMsg, innerUsers)
@@ -143,6 +141,7 @@ func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int,
 		}
 		if u, ok := userMap[peer.UserID]; ok {
 			a.FirstName = u.FirstName
+			a.LastName = u.LastName
 			a.Username = u.Username
 			a.IsBot = u.Bot
 		}
@@ -150,8 +149,8 @@ func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int,
 	}
 
 	media, err := fetchMediaGroup(ctx, chatID, replyMsg)
-	if err != nil || replyMsg == nil {
-		return nil, err
+	if err != nil {
+		log.Printf("fetchMediaGroup: %v", err)
 	}
 
 	location, _, err := fetchStickerFromMessage(ctx, replyMsg)
@@ -231,9 +230,13 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 		var replyInfo *renderclient.Reply
 		if replyEnable {
 			if quoteData.ReplyTo != nil {
+				authorName := quoteData.ReplyTo.Author.FirstName
+				if quoteData.ReplyTo.Author.LastName != "" {
+					authorName = quoteData.ReplyTo.Author.FirstName + " " + quoteData.ReplyTo.Author.LastName
+				}
 				replyInfo = &renderclient.Reply{
 					AuthorID:   quoteData.ReplyTo.Author.ID,
-					AuthorName: quoteData.ReplyTo.Author.FirstName,
+					AuthorName: authorName,
 					Text:       quoteData.ReplyTo.Text,
 				}
 			}
@@ -249,11 +252,14 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 		entities := parseEntities(text, quoteData.replyMsg.Entities, color.RGBA{255, 255, 255, 255})
 		if replyHeader.Quote && replyHeader.QuoteText != "" {
 			text = replyHeader.QuoteText
-			entities = parseEntities(text, nil, color.RGBA{255, 255, 255, 255})
+			entities = parseEntities(text, replyHeader.QuoteEntities, color.RGBA{255, 255, 255, 255})
 		}
 
 		authorID := quoteData.Author.ID
 		authorName := quoteData.Author.FirstName
+		if quoteData.Author.LastName != "" {
+			authorName = quoteData.Author.FirstName + " " + quoteData.Author.LastName
+		}
 		if quoteData.Author.ID == 0 || quoteData.Author.FirstName == "" {
 			authorID = userID
 			authorName = userFirstName
@@ -262,7 +268,7 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 			}
 		}
 
-		avatar, err := fetchAvatar(ctx, authorID, quoteData.Author.Username, quoteData.ChatMap)
+		avatar := getAvatar(ctx, authorID, quoteData.Author.Username, quoteData.UserMap, quoteData.ChatMap)
 		if err != nil {
 			log.Printf("fetchAvatar: %v", err)
 		}
@@ -317,13 +323,11 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 	}
 
 	var chatMessages []renderclient.Message
-	avatarCache := make(map[int64][]byte)
-	var avatar []byte
-	var cached bool
 
 	roles := getChatRoles(ctx, chatID)
 
 	for i, group := range groups {
+		var avatar []byte
 		mainMsg := group.Messages[0]
 
 		quoteData, err := extractQuoteDataFromStack(ctx, chatID, mainMsg.ID, mainMsg, users, chatMap)
@@ -345,9 +349,13 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 		var replyInfo *renderclient.Reply
 		if replyEnable {
 			if quoteData.ReplyTo != nil {
+				authorName := quoteData.ReplyTo.Author.FirstName
+				if quoteData.ReplyTo.Author.LastName != "" {
+					authorName = quoteData.ReplyTo.Author.FirstName + " " + quoteData.ReplyTo.Author.LastName
+				}
 				replyInfo = &renderclient.Reply{
 					AuthorID:   quoteData.ReplyTo.Author.ID,
-					AuthorName: quoteData.ReplyTo.Author.FirstName,
+					AuthorName: authorName,
 					Text:       quoteData.ReplyTo.Text,
 				}
 			}
@@ -377,31 +385,16 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 		// }
 
 		authorID := quoteData.Author.ID
-		avatar, cached = avatarCache[authorID]
-
-		if !cached {
-			location, err := GetAvatarLocationFromPeer(users, chatMap, ctx, authorID)
-
-			if err == nil && location != nil {
-				avatar, err = downloadFile(ctx, location)
-				if err != nil {
-					log.Printf("avatar download failed for user %d: %v", authorID, err)
-					avatar = nil
-				}
-			}
-			if avatar == nil {
-				avatar, err = fetchAvatar(ctx, authorID, quoteData.Author.Username, quoteData.ChatMap)
-				if err != nil {
-					log.Printf("fetchAvatar error: %v", err)
-				}
-			}
-
-			avatarCache[authorID] = avatar
+		authorName := quoteData.Author.FirstName
+		if quoteData.Author.LastName != "" {
+			authorName = quoteData.Author.FirstName + " " + quoteData.Author.LastName
 		}
 
+		avatar = getAvatar(ctx, authorID, quoteData.Author.Username, users, chatMap)
+
 		chatMessages = append(chatMessages, renderclient.Message{
-			AuthorID:    quoteData.Author.ID,
-			AuthorName:  quoteData.Author.FirstName,
+			AuthorID:    authorID,
+			AuthorName:  authorName,
 			Avatar:      avatar,
 			Tag:         tag,
 			Reply:       replyInfo,

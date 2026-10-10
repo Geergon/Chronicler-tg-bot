@@ -43,9 +43,6 @@ func getChatRoles(ctx *ext.Context, chatID int64) map[int64]roleInfo {
 	case *tg.InputPeerChat:
 		roles = fetchBasicGroupRoles(ctx, peer.ChatID)
 	}
-	if roles == nil {
-		roles = map[int64]roleInfo{} // also cache failures to reduce API requests
-	}
 
 	rolesCacheMu.Lock()
 	rolesCache[chatID] = rolesEntry{at: time.Now(), roles: roles}

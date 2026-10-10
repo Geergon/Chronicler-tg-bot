@@ -100,9 +100,9 @@ func fetchMedia(ctx *ext.Context, msg *tg.Message) ([][]byte, error) {
 	}
 
 	log.Printf("fetchMedia: photo ID=%d sizes=%d", photo.ID, len(photo.Sizes))
-	for _, s := range photo.Sizes {
-		log.Printf(" media size type=%T %+v", s, s)
-	}
+	// for _, s := range photo.Sizes {
+	// 	log.Printf(" media size type=%T %+v", s, s)
+	// }
 
 	bestSize := pickBestPhotoSize(photo.Sizes)
 	// log.Printf("fetchMedia: bestSize=%s", bestSize)
