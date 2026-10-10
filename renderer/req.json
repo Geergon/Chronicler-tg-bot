@@ -1,0 +1,20 @@
+{
+  "messages": [
+    {
+      "author_id": 42,
+      "author_name": "John",
+      "tag": {
+        "text": "owner",
+        "kind": "owner"
+      },
+      "avatar": "img0",
+      "bubble_color": "#1E1E28",
+      "segments": [
+        {
+          "text": "Hello 👋",
+          "color": "#FFFFFF"
+        }
+      ]
+    }
+  ]
+}
