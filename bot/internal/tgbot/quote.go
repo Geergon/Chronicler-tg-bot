@@ -25,7 +25,7 @@ type MessageAuthor struct {
 type QuoteData struct {
 	Author   MessageAuthor
 	Text     string
-	Media    [][]byte
+	Media    []renderclient.MediaItem
 	ReplyTo  *QuoteData
 	ChatMap  map[int64]tg.ChatClass
 	UserMap  map[int64]*tg.User
@@ -78,7 +78,7 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 	} else if location != nil {
 		sticker, err := downloadFile(ctx, location)
 		if err == nil && sticker != nil {
-			media = append(media, sticker)
+			media = append(media, renderclient.MediaItem{Data: sticker, Spoiler: false})
 		} else if err != nil {
 			log.Printf("failed to download sticker from message: %v", err)
 		}
@@ -159,7 +159,7 @@ func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int,
 	} else if location != nil {
 		sticker, err := downloadFile(ctx, location)
 		if err == nil && sticker != nil {
-			media = append(media, sticker)
+			media = append(media, renderclient.MediaItem{Data: sticker, Spoiler: false})
 		} else if err != nil {
 			log.Printf("failed to download sticker from message: %v", err)
 		}

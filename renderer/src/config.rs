@@ -1,0 +1,20 @@
+#[derive(Debug, Clone)]
+pub struct UiConfig {
+    pub padding_x: i32,
+    pub padding_y: i32,
+    pub name_font_size: i32,
+    pub reply_font_size: i32,
+    pub text_font_size: i32,
+    pub gap_after_name: i32,
+    pub gap_after_reply: i32,
+    pub reply_line_width: i32,
+    pub reply_line_gap: i32,
+    pub corner_radius: i32,
+    pub avatar_size: i32,
+    pub avatar_gap: i32,
+    pub vertical_gap: i32,
+    pub media_radius: i32,
+    pub media_group_gap: i32,
+    pub gap_after_media: i32,
+    pub bottom_margin: i32,
+}

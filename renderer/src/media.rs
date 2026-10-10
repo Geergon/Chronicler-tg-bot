@@ -5,9 +5,11 @@ use skia_safe::surfaces;
 use crate::image::finalize_size;
 use crate::image::resize_image;
 use crate::image::round_image;
+use crate::spoiler::apply_spoiler;
 use crate::types::BoxOpts;
 use crate::types::ChatMessage;
 use crate::types::LeafOpts;
+use crate::types::MediaItem;
 use crate::types::Node;
 use crate::types::Sizes;
 
@@ -44,7 +46,9 @@ fn crop_to_square(img: &Image) -> Image {
     crop_to_aspect(&img, 1.0)
 }
 
-pub fn single_media_leaf(original: &Image, max_w: f32, max_height_ratio: f32, radius: f32) -> Node {
+pub fn single_media_leaf(media: &MediaItem, max_w: f32, s: &Sizes) -> Node {
+    let max_height_ratio = s.media_max_height_ratio;
+    let original = &media.image;
     let (src_w, src_h) = (original.width() as f32, original.height() as f32);
     let aspect = src_w / src_h;
 
@@ -60,7 +64,12 @@ pub fn single_media_leaf(original: &Image, max_w: f32, max_height_ratio: f32, ra
     };
 
     let resized = resize_image(&source, w.round() as i32, h.round() as i32);
-    let mut rounded = round_image(&resized, radius);
+    let resized = if media.spoiler {
+        apply_spoiler(&resized, s.scale)
+    } else {
+        resized
+    };
+    let mut rounded = round_image(&resized, s.media_radius);
 
     Node::leaf(
         Some(rounded.image_snapshot()),
@@ -73,20 +82,23 @@ pub fn single_media_leaf(original: &Image, max_w: f32, max_height_ratio: f32, ra
     .unwrap()
 }
 
-fn media_group_row(images: &[Image], max_w: f32, gap: f32, radius: f32) -> Node {
+fn media_group_row(images: &[MediaItem], max_w: f32, s: &Sizes) -> Node {
+    let gap = s.media_group_gap;
     let n = images.len() as f32;
     let thumb_size = (max_w - gap * (n - 1.0)) / n;
+    let side = (thumb_size.round() as i32).max(1);
 
     let children: Vec<Option<Node>> = images
         .iter()
         .map(|img| {
-            let square = crop_to_square(img);
-            let resized = resize_image(
-                &square,
-                thumb_size.round() as i32,
-                thumb_size.round() as i32,
-            );
-            let mut rounded = round_image(&resized, radius);
+            let square = crop_to_square(&img.image);
+            let resized = resize_image(&square, side, side);
+            let resized = if img.spoiler {
+                apply_spoiler(&resized, s.scale)
+            } else {
+                resized
+            };
+            let mut rounded = round_image(&resized, s.media_radius);
             Node::leaf(
                 Some(rounded.image_snapshot()),
                 LeafOpts {
@@ -106,16 +118,11 @@ fn media_group_row(images: &[Image], max_w: f32, gap: f32, radius: f32) -> Node 
     })
 }
 
-pub fn build_media_node(media: &[Image], max_content_width: f32, s: &Sizes) -> Node {
+pub fn build_media_node(media: &[MediaItem], max_content_width: f32, s: &Sizes) -> Node {
     if media.len() == 1 {
-        return single_media_leaf(
-            &media[0],
-            max_content_width,
-            s.media_max_height_ratio,
-            s.media_radius,
-        );
+        return single_media_leaf(&media[0], max_content_width, s);
     }
-    media_group_row(media, max_content_width, s.media_group_gap, s.media_radius)
+    media_group_row(media, max_content_width, s)
 }
 
 pub fn is_standalone_media(messages: &[ChatMessage]) -> bool {
@@ -128,18 +135,20 @@ pub fn is_standalone_media(messages: &[ChatMessage]) -> bool {
     m.media.len() == 1 && !has_text && m.reply.is_none()
 }
 
+// for the future, if there is a need to add a spoiler for a standalone photo, then uncomment the comments and change &Image to &MediaItem
 pub fn build_standalone_media(img: &Image) -> Image {
     finalize_size(img.clone())
+    // let img = finalize_size(item.image.clone());
+    // if item.spoiler {
+    //     apply_spoiler(&img, 2.0)
+    // } else {
+    //     img
+    // }
 }
 
-pub fn build_standalone_media_node(media: &[Image], max_width: f32, s: &Sizes) -> Node {
+pub fn build_standalone_media_node(media: &[MediaItem], max_width: f32, s: &Sizes) -> Node {
     if media.len() == 1 {
-        return single_media_leaf(
-            &media[0],
-            max_width,
-            s.media_max_height_ratio,
-            s.media_radius,
-        );
+        return single_media_leaf(&media[0], max_width, s);
     }
-    media_group_row(&media, max_width, s.media_group_gap, s.media_radius)
+    media_group_row(&media, max_width, s)
 }

@@ -14,7 +14,11 @@
           "text": "Hello 👋",
           "color": "#FFFFFF"
         }
-      ]
+      ],
+        "media": {
+            "part": "img1",
+            "spoiler": true
+        }
     }
   ]
 }

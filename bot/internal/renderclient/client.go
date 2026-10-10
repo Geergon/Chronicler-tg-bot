@@ -49,7 +49,12 @@ type Message struct {
 	Reply       *Reply
 	Segments    []Segment
 	BubbleColor color.Color
-	Media       [][]byte
+	Media       []MediaItem
+}
+
+type MediaItem struct {
+	Data    []byte
+	Spoiler bool
 }
 
 type Tag struct {
@@ -85,7 +90,12 @@ type wireMessage struct {
 	Reply       *wireReply    `json:"reply,omitempty"`
 	Segments    []wireSegment `json:"segments"`
 	BubbleColor string        `json:"bubble_color"`
-	Media       []string      `json:"media,omitempty"`
+	Media       []wireMedia   `json:"media,omitempty"`
+}
+
+type wireMedia struct {
+	Part    string `json:"part"`
+	Spoiler bool   `json:"spoiler,omitempty"`
 }
 
 type wireTag struct {
@@ -250,8 +260,8 @@ func buildBody(msgs []Message) ([]byte, string, error) {
 			}
 		}
 		for _, img := range m.Media {
-			if len(img) > 0 {
-				wm.Media = append(wm.Media, store.add(img))
+			if len(img.Data) > 0 {
+				wm.Media = append(wm.Media, wireMedia{Part: store.add(img.Data), Spoiler: img.Spoiler})
 			}
 		}
 		for _, s := range m.Segments {

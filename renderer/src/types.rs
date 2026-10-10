@@ -1,7 +1,7 @@
 use skia_safe::{Canvas, Color, Image};
 use std::rc::Rc;
 
-use crate::render::UiConfig;
+use crate::config::UiConfig;
 
 // ---------- Data from message ----------
 
@@ -46,7 +46,7 @@ pub struct QuoteParams {
     pub segments: Vec<TextSegment>,
     pub bubble_color: Color,
     pub max_bubble_width: f32,
-    pub media: Vec<Image>,
+    pub media: Vec<MediaItem>,
 }
 
 #[derive(Debug, Clone)]
@@ -59,7 +59,7 @@ pub struct MessageBlock {
     pub standalone: bool,
     pub segments: Vec<TextSegment>,
     pub bubble_color: Color,
-    pub media: Vec<Image>,
+    pub media: Vec<MediaItem>,
 }
 
 #[derive(Debug, Clone)]
@@ -72,7 +72,13 @@ pub struct ChatMessage {
     pub reply: Option<ReplyInfo>,
     pub segments: Vec<TextSegment>,
     pub bubble_color: Color,
-    pub media: Vec<Image>,
+    pub media: Vec<MediaItem>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MediaItem {
+    pub image: Image,
+    pub spoiler: bool,
 }
 
 // ---------- Layout ----------

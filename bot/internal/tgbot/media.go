@@ -5,13 +5,17 @@ import (
 	"log"
 	"sort"
 
+	"github.com/Geergon/Chronicler-tg-bot/internal/renderclient"
 	"github.com/celestix/gotgproto/ext"
 	"github.com/gotd/td/tg"
 )
 
-func fetchMediaGroup(ctx *ext.Context, chatID int64, msg *tg.Message) ([][]byte, error) {
+func fetchMediaGroup(ctx *ext.Context, chatID int64, msg *tg.Message) ([]renderclient.MediaItem, error) {
 	if msg.GroupedID == 0 {
-		return fetchMedia(ctx, msg)
+		var allMedia []renderclient.MediaItem
+		media, err := fetchMedia(ctx, msg)
+		allMedia = append(allMedia, media)
+		return allMedia, err
 	}
 
 	const searchRange = 9
@@ -68,35 +72,35 @@ func fetchMediaGroup(ctx *ext.Context, chatID int64, msg *tg.Message) ([][]byte,
 		return groupMsgs[i].ID < groupMsgs[j].ID
 	})
 
-	var images [][]byte
+	var images []renderclient.MediaItem
 	for _, gm := range groupMsgs {
 		imgs, err := fetchMedia(ctx, gm)
 		if err != nil {
 			log.Printf("fetchMediaGroup: skip msg %d: %v", gm.ID, err)
 			continue
 		}
-		images = append(images, imgs...)
+		images = append(images, imgs)
 	}
 
 	return images, nil
 }
 
-func fetchMedia(ctx *ext.Context, msg *tg.Message) ([][]byte, error) {
+func fetchMedia(ctx *ext.Context, msg *tg.Message) (renderclient.MediaItem, error) {
 	if msg.Media == nil {
 		// log.Println("message doesn't contain media")
-		return nil, nil
+		return renderclient.MediaItem{}, nil
 	}
 
 	mediaPhoto, ok := msg.Media.(*tg.MessageMediaPhoto)
 	if !ok {
 		// log.Println("media not photo")
-		return nil, nil
+		return renderclient.MediaItem{}, nil
 	}
 
 	photo, ok := mediaPhoto.Photo.(*tg.Photo)
 	if !ok {
 		log.Println("failed to get photo object")
-		return nil, nil
+		return renderclient.MediaItem{}, nil
 	}
 
 	log.Printf("fetchMedia: photo ID=%d sizes=%d", photo.ID, len(photo.Sizes))
@@ -108,7 +112,7 @@ func fetchMedia(ctx *ext.Context, msg *tg.Message) ([][]byte, error) {
 	// log.Printf("fetchMedia: bestSize=%s", bestSize)
 	if bestSize == nil {
 		log.Printf("fetchMedia: no suitable size found")
-		return nil, nil
+		return renderclient.MediaItem{}, nil
 	}
 	// log.Printf("fetchMedia: bestSize type=%s", bestSize.Type)
 
@@ -121,9 +125,9 @@ func fetchMedia(ctx *ext.Context, msg *tg.Message) ([][]byte, error) {
 
 	data, err := downloadFile(ctx, location)
 	if err != nil {
-		return nil, err
+		return renderclient.MediaItem{}, err
 	}
-	return [][]byte{data}, err
+	return renderclient.MediaItem{Data: data, Spoiler: mediaPhoto.Spoiler}, err
 }
 
 func pickBestPhotoSize(sizes []tg.PhotoSizeClass) *tg.PhotoSize {

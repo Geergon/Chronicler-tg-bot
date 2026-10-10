@@ -1,7 +1,5 @@
 use anyhow::{Context, Result};
-use skia_safe::{
-    surfaces, textlayout::FontCollection, Canvas, Color, EncodedImageFormat, Image, Paint, Rect,
-};
+use skia_safe::{surfaces, textlayout::FontCollection, Canvas, Color, Image, Paint, Rect};
 use std::{path::Path, rc::Rc};
 
 use crate::{
@@ -10,6 +8,7 @@ use crate::{
         avatar_color_from_id, name_color_from_id, ADMIN_TAG_BG, ADMIN_TAG_FG, MEMBER_TAG_BG,
         MEMBER_TAG_FG, OWNER_TAG_BG, OWNER_TAG_FG,
     },
+    config::UiConfig,
     fonts::init_fonts,
     image::{finalize_size, resize_image, round_image},
     layout::{measure, place, render, spacer},
@@ -26,27 +25,6 @@ use crate::{
 const MAX_SCALE: f32 = 3.0;
 pub const STICKER_MAX_SIDE: f32 = 512.0;
 const REPLY_TEXT_COLOR: skia_safe::Color = skia_safe::Color::from_argb(255, 209, 209, 209);
-
-#[derive(Debug, Clone)]
-pub struct UiConfig {
-    pub padding_x: i32,
-    pub padding_y: i32,
-    pub name_font_size: i32,
-    pub reply_font_size: i32,
-    pub text_font_size: i32,
-    pub gap_after_name: i32,
-    pub gap_after_reply: i32,
-    pub reply_line_width: i32,
-    pub reply_line_gap: i32,
-    pub corner_radius: i32,
-    pub avatar_size: i32,
-    pub avatar_gap: i32,
-    pub vertical_gap: i32,
-    pub media_radius: i32,
-    pub media_group_gap: i32,
-    pub gap_after_media: i32,
-    pub bottom_margin: i32,
-}
 
 struct TagStyle {
     bg: Color,
@@ -97,8 +75,6 @@ impl Renderer {
             }
 
             let gap = s.name_font_size * 0.5;
-            let reserved = tag.as_ref().map_or(0.0, |t| t.w + gap);
-            let _name_max_w = (max_content_width - reserved).max(1.0);
 
             let name_segs = [TextSegment {
                 text: p.author_name.clone(),
@@ -320,7 +296,7 @@ impl Renderer {
 
     pub fn build_sticker_chat_stack(&self, messages: &[ChatMessage]) -> Result<Image> {
         if is_standalone_media(messages) {
-            return Ok(build_standalone_media(&messages[0].media[0]));
+            return Ok(build_standalone_media(&messages[0].media[0].image));
         }
 
         // Pass 1: natural dimensions at scale = 1

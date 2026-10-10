@@ -7,6 +7,8 @@ mod media;
 mod render;
 mod text;
 mod types;
+mod spoiler;
+mod config;
 
 use std::{
     collections::HashMap,
@@ -18,17 +20,18 @@ use std::{
 use anyhow::{Context, Result, anyhow, bail};
 use axum::{
     Router,
-    extract::{DefaultBodyLimit, Multipart, State, Query},
+    extract::{DefaultBodyLimit, Multipart, State},
     http::{StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+use config::UiConfig;
 use serde::Deserialize;
 use skia_safe::{Color, Data, EncodedImageFormat, Image};
 use tokio::sync::oneshot;
 
-use render::{Renderer, UiConfig};
-use types::{ChatMessage, ReplyInfo, Tag, TagKind, TextSegment};
+use render::{Renderer};
+use types::{ChatMessage, MediaItem, ReplyInfo, Tag, TagKind, TextSegment};
 
 // ───────────────────────── Limits ─────────────────────────
 
@@ -75,7 +78,14 @@ struct MessageDto {
     segments: Vec<SegmentDto>,
     bubble_color: String, // "#RRGGBB" or "#AARRGGBB"
     #[serde(default)]
-    media: Vec<String>, // multipart-part name
+    media: Vec<MediaDto>, // multipart-part name
+}
+
+#[derive(Debug, Deserialize)]
+struct MediaDto{
+    part: String,
+#[serde(default)]
+    spoiler: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -191,17 +201,17 @@ fn into_chat_messages(
             None => None,
         };
 
-        let media: Vec<Image> = m
-            .media
-            .iter()
-            .filter_map(|name| match store.get(name) {
-                Ok(img) => Some(img),
+        let mut media: Vec<MediaItem> = vec![];
+        for img in m.media {
+            match store.get(&img.part) {
+                Ok(i) => {
+                    media.push(MediaItem { image: i, spoiler: img.spoiler });
+                },
                 Err(e) => {
-                    eprintln!("message #{i}: media {name} skipped: {e:#}");
-                    None
-                }
-            })
-            .collect();
+                    eprintln!("message #{i}: media {} skipped: {e:#}", &img.part);
+                },
+            }
+        }
 
         let segments = m
             .segments
