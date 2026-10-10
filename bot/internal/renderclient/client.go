@@ -15,6 +15,14 @@ import (
 	"time"
 )
 
+type TagType string
+
+const (
+	TagOwner  TagType = "owner"
+	TagAdmin  TagType = "admin"
+	TagMember TagType = "member"
+)
+
 type Reply struct {
 	AuthorID   int64
 	AuthorName string
@@ -35,7 +43,7 @@ type Segment struct {
 type Message struct {
 	AuthorID    int64
 	AuthorName  string
-	AdminTag    string
+	Tag         *Tag
 	Avatar      []byte
 	Standalone  bool
 	Reply       *Reply
@@ -44,10 +52,10 @@ type Message struct {
 	Media       [][]byte
 }
 
-// type Tag struct {
-// 	TagText string
-// 	TagType string
-// }
+type Tag struct {
+	TagText string
+	TagType TagType
+}
 
 // ───────────── JSON-contract with Rust backend ─────────────
 
@@ -71,13 +79,18 @@ type wireSegment struct {
 type wireMessage struct {
 	AuthorID    int64         `json:"author_id"`
 	AuthorName  string        `json:"author_name"`
-	AdminTag    *string       `json:"admin_tag,omitempty"`
+	Tag         *wireTag      `json:"tag,omitempty"`
 	Avatar      *string       `json:"avatar,omitempty"`
 	Standalone  bool          `json:"standalone"`
 	Reply       *wireReply    `json:"reply,omitempty"`
 	Segments    []wireSegment `json:"segments"`
 	BubbleColor string        `json:"bubble_color"`
 	Media       []string      `json:"media,omitempty"`
+}
+
+type wireTag struct {
+	Text string `json:"text"`
+	Kind string `json:"kind"`
 }
 
 type wireRequest struct {
@@ -222,9 +235,8 @@ func buildBody(msgs []Message) ([]byte, string, error) {
 			Segments:    make([]wireSegment, 0, len(m.Segments)),
 		}
 
-		if m.AdminTag != "" {
-			tag := m.AdminTag
-			wm.AdminTag = &tag
+		if m.Tag != nil && m.Tag.TagText != "" {
+			wm.Tag = &wireTag{Text: m.Tag.TagText, Kind: string(m.Tag.TagType)}
 		}
 		if len(m.Avatar) > 0 {
 			name := store.add(m.Avatar)

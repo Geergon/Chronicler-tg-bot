@@ -444,36 +444,3 @@ func parseEntities(text string, entities []tg.MessageEntityClass, defaultColor c
 
 	return segments
 }
-
-func adminTag(ctx *ext.Context, chatID, userID int64) string {
-	ch, ok := ctx.PeerStorage.GetInputPeerById(chatID).(*tg.InputPeerChannel)
-	if !ok {
-		return ""
-	}
-	user := ctx.PeerStorage.GetInputPeerById(userID)
-	if user == nil {
-		return ""
-	}
-
-	res, err := ctx.Raw.ChannelsGetParticipant(ctx, &tg.ChannelsGetParticipantRequest{
-		Channel:     &tg.InputChannel{ChannelID: ch.ChannelID, AccessHash: ch.AccessHash},
-		Participant: user,
-	})
-	if err != nil {
-		return ""
-	}
-
-	switch p := res.Participant.(type) {
-	case *tg.ChannelParticipantCreator:
-		if p.Rank != "" {
-			return p.Rank
-		}
-		return "owner"
-	case *tg.ChannelParticipantAdmin:
-		if p.Rank != "" {
-			return p.Rank
-		}
-		return "admin"
-	}
-	return ""
-}

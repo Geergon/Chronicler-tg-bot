@@ -1,4 +1,4 @@
-use skia_safe::{surfaces, Canvas, Rect};
+use skia_safe::{Canvas, Rect, surfaces};
 
 use crate::types::{Align, Dir, Justify, LeafOpts, Node, NodeKind};
 

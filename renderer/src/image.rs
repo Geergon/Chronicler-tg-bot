@@ -1,7 +1,4 @@
-use skia_safe::{
-    surfaces, ClipOp, CubicResampler, FilterMode, Image, MipmapMode, Paint, RRect, Rect,
-    SamplingOptions, Surface,
-};
+use skia_safe::{ClipOp, CubicResampler, Image, RRect, Rect, SamplingOptions, Surface, surfaces};
 
 use crate::render::STICKER_MAX_SIDE;
 

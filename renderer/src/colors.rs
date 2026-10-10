@@ -8,11 +8,11 @@ const BOTTOM_COLORS: [u32; 7] = [
 ];
 
 pub const ADMIN_TAG_FG: Color = Color::from_argb(255, 111, 203, 109);
-pub const ADMIN_TAG_BG: Color = Color::from_argb(255, 44, 138, 54);
+pub const ADMIN_TAG_BG: Color = Color::from_argb(255, 66, 83, 89);
 pub const OWNER_TAG_FG: Color = Color::from_argb(255, 176, 140, 240);
-pub const OWNER_TAG_BG: Color = Color::from_argb(255, 109, 63, 192);
-pub const MEMBER_TAG_FG_DARK: Color = Color::from_argb(150, 255, 255, 255);
-pub const MEMBER_TAG_BG_DARK: Color = Color::from_argb(0, 0, 0, 0);
+pub const OWNER_TAG_BG: Color = Color::from_argb(255, 77, 75, 106);
+pub const MEMBER_TAG_FG: Color = Color::from_argb(150, 255, 255, 255);
+pub const MEMBER_TAG_BG: Color = Color::from_argb(0, 0, 0, 0);
 
 const NAME_COLORS: [u32; 7] = [
     0xFFCA5650, // #ca5650

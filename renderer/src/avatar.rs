@@ -1,10 +1,10 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use skia_safe::{
+    Canvas, Color, Color4f, FontStyle, Image, Paint, Point, Rect, TileMode,
     gradient::{Colors, Gradient, Interpolation},
     shaders::linear_gradient,
     surfaces,
     textlayout::{FontCollection, ParagraphBuilder, ParagraphStyle, TextAlign, TextStyle},
-    Canvas, Color, Color4f, FontStyle, Image, Paint, Point, Rect, TileMode,
 };
 use unicode_segmentation::UnicodeSegmentation;
 

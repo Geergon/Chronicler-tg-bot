@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use skia_safe::{
-    textlayout::{FontCollection, TypefaceFontProvider},
     Data, FontMgr,
+    textlayout::{FontCollection, TypefaceFontProvider},
 };
 use std::{fs, io, path::Path};
 

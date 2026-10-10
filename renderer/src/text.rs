@@ -1,11 +1,11 @@
 use crate::{fonts::*, types::TextSegment};
 use skia_safe::{
+    Color, FontStyle, Image, Paint,
     font_style::{Slant, Weight, Width},
     surfaces,
     textlayout::{
         FontCollection, ParagraphBuilder, ParagraphStyle, TextAlign, TextDecoration, TextStyle,
     },
-    Color, FontStyle, Image, Paint,
 };
 
 pub const MONO_FAMILIES: &[&str] = &[NOTO_MONO, NOTO_CJK, NOTO_CUNEIFORM, NOTO_EMOJI];

@@ -11,24 +11,24 @@ mod types;
 use std::{
     collections::HashMap,
     panic::AssertUnwindSafe,
-    sync::{mpsc, Arc},
+    sync::{Arc, mpsc},
     time::Duration,
 };
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use axum::{
+    Router,
     extract::{DefaultBodyLimit, Multipart, State},
-    http::{header, StatusCode},
+    http::{StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
-    Router,
 };
 use serde::Deserialize;
 use skia_safe::{Color, Data, EncodedImageFormat, Image};
 use tokio::sync::oneshot;
 
 use render::{Renderer, UiConfig};
-use types::{ChatMessage, ReplyInfo, TextSegment};
+use types::{ChatMessage, ReplyInfo, Tag, TagKind, TextSegment};
 
 // ───────────────────────── Limits ─────────────────────────
 
@@ -46,12 +46,27 @@ struct RenderRequest {
     messages: Vec<MessageDto>,
 }
 
+#[derive(Debug, Deserialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+enum TagKindDto {
+    Owner,
+    Admin,
+    #[serde(other)]
+    Member,
+}
+
+#[derive(Debug, Deserialize)]
+struct TagDto {
+    text: String,
+    kind: TagKindDto,
+}
+
 #[derive(Debug, Deserialize)]
 struct MessageDto {
     author_id: i64,
     #[serde(default)]
     author_name: String,
-    admin_tag: Option<String>,
+    tag: Option<TagDto>,
     avatar: Option<String>, // multipart part file name
     #[serde(default)]
     standalone: bool,
@@ -149,16 +164,27 @@ fn into_chat_messages(
         let ctx = || format!("message #{i}");
 
         let avatar_img = match &m.avatar {
-            Some(name) => Some(store.get(name).with_context(ctx)?),
+            Some(name) => match store.get(name) {
+                Ok(img) => Some(img),
+                Err(e) => {
+                    eprintln!("message #{i}: avatar skipped: {e:#}");
+                    None
+                }
+            },
             None => None,
         };
 
-        let media = m
+        let media: Vec<Image> = m
             .media
             .iter()
-            .map(|name| store.get(name))
-            .collect::<Result<Vec<_>>>()
-            .with_context(ctx)?;
+            .filter_map(|name| match store.get(name) {
+                Ok(img) => Some(img),
+                Err(e) => {
+                    eprintln!("message #{i}: media {name} skipped: {e:#}");
+                    None
+                }
+            })
+            .collect();
 
         let segments = m
             .segments
@@ -181,7 +207,14 @@ fn into_chat_messages(
         out.push(ChatMessage {
             author_id: m.author_id,
             author_name: m.author_name,
-            admin_tag: m.admin_tag,
+            tag: m.tag.filter(|t| !t.text.is_empty()).map(|t| Tag {
+                text: t.text,
+                kind: match t.kind {
+                    TagKindDto::Owner => TagKind::Owner,
+                    TagKindDto::Admin => TagKind::Admin,
+                    TagKindDto::Member => TagKind::Member,
+                },
+            }),
             avatar_img,
             standalone: m.standalone,
             reply: m.reply.map(|r| ReplyInfo {
@@ -321,7 +354,11 @@ async fn render_handler(
     let mut request: Option<RenderRequest> = None;
     let mut files: HashMap<String, Vec<u8>> = HashMap::new();
 
-    while let Some(field) = multipart.next_field().await.map_err(AppError::bad_request)? {
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(AppError::bad_request)?
+    {
         let name = field.name().unwrap_or_default().to_string();
         let data = field.bytes().await.map_err(AppError::bad_request)?;
 
@@ -332,7 +369,9 @@ async fn render_handler(
             );
         } else {
             if files.len() >= MAX_FILES {
-                return Err(AppError::bad_request(format!("too many files (max {MAX_FILES})")));
+                return Err(AppError::bad_request(format!(
+                    "too many files (max {MAX_FILES})"
+                )));
             }
             files.insert(name, data.to_vec());
         }
@@ -344,12 +383,18 @@ async fn render_handler(
         return Err(AppError::bad_request("messages must not be empty"));
     }
     if request.messages.len() > MAX_MESSAGES {
-        return Err(AppError::bad_request(format!("too many messages (max {MAX_MESSAGES})")));
+        return Err(AppError::bad_request(format!(
+            "too many messages (max {MAX_MESSAGES})"
+        )));
     }
 
     let (reply_tx, reply_rx) = oneshot::channel();
     app.jobs
-        .try_send(Job { request, files, reply: reply_tx })
+        .try_send(Job {
+            request,
+            files,
+            reply: reply_tx,
+        })
         .map_err(|e| match e {
             async_channel::TrySendError::Full(_) => {
                 AppError(StatusCode::SERVICE_UNAVAILABLE, "renderer is busy".into())

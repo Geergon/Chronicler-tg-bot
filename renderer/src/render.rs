@@ -6,7 +6,10 @@ use std::{path::Path, rc::Rc};
 
 use crate::{
     avatar::{avatar_image_letters, initials},
-    colors::{avatar_color_from_id, name_color_from_id, ADMIN_TAG_BG, ADMIN_TAG_FG},
+    colors::{
+        avatar_color_from_id, name_color_from_id, ADMIN_TAG_BG, ADMIN_TAG_FG, MEMBER_TAG_BG,
+        MEMBER_TAG_FG, OWNER_TAG_BG, OWNER_TAG_FG,
+    },
     fonts::init_fonts,
     image::{finalize_size, resize_image, round_image},
     layout::{measure, place, render, spacer},
@@ -16,7 +19,7 @@ use crate::{
     text::render_rich_text,
     types::{
         Align, BoxOpts, ChatMessage, Dir, Justify, LeafOpts, MessageBlock, Node, NodeFn, Pad,
-        QuoteParams, Sizes, TextSegment,
+        QuoteParams, Sizes, Tag, TagKind, TextSegment,
     },
 };
 
@@ -45,6 +48,28 @@ pub struct UiConfig {
     pub bottom_margin: i32,
 }
 
+struct TagStyle {
+    bg: Color,
+    fg: Color,
+}
+
+fn tag_style(kind: TagKind) -> TagStyle {
+    match kind {
+        TagKind::Owner => TagStyle {
+            bg: OWNER_TAG_BG,
+            fg: OWNER_TAG_FG,
+        },
+        TagKind::Admin => TagStyle {
+            bg: ADMIN_TAG_BG,
+            fg: ADMIN_TAG_FG,
+        },
+        TagKind::Member => TagStyle {
+            bg: MEMBER_TAG_BG,
+            fg: MEMBER_TAG_FG,
+        },
+    }
+}
+
 pub struct Renderer {
     pub fonts: FontCollection,
     pub ui: UiConfig,
@@ -64,8 +89,8 @@ impl Renderer {
 
         if !p.author_name.is_empty() {
             let mut tag = p
-                .admin_tag
-                .as_deref()
+                .tag
+                .as_ref()
                 .and_then(|t| self.build_tag_node(t, max_content_width * 0.5, s));
             if let Some(t) = tag.as_mut() {
                 measure(t);
@@ -73,7 +98,7 @@ impl Renderer {
 
             let gap = s.name_font_size * 0.5;
             let reserved = tag.as_ref().map_or(0.0, |t| t.w + gap);
-            let name_max_w = (max_content_width - reserved).max(1.0);
+            let _name_max_w = (max_content_width - reserved).max(1.0);
 
             let name_segs = [TextSegment {
                 text: p.author_name.clone(),
@@ -204,7 +229,7 @@ impl Renderer {
             &QuoteParams {
                 author_id: m.author_id,
                 author_name: m.author_name.clone(),
-                admin_tag: m.admin_tag.clone(),
+                tag: m.tag.clone(),
                 reply: m.reply.clone(),
                 segments: m.segments.clone(),
                 bubble_color: m.bubble_color,
@@ -263,7 +288,7 @@ impl Renderer {
                 author_id: msg.author_id,
                 author_name: String::new(),
                 avatar_img: None,
-                admin_tag: Some(String::new()),
+                tag: None,
                 reply: msg.reply.clone(),
                 standalone: msg.standalone,
                 segments: msg.segments.clone(),
@@ -273,7 +298,7 @@ impl Renderer {
             if !msg.standalone && is_first {
                 block.author_name = msg.author_name.clone();
                 block.avatar_img = msg.avatar_img.clone();
-                block.admin_tag = msg.admin_tag.clone();
+                block.tag = msg.tag.clone();
             }
 
             rows.push(Some(self.build_message_row(&block, max_bubble_width, s)?));
@@ -319,20 +344,22 @@ impl Renderer {
         Ok(finalize_size(surface.image_snapshot()))
     }
 
-    fn build_tag_node(&self, text: &str, max_w: f32, s: &Sizes) -> Option<Node> {
+    fn build_tag_node(&self, tag: &Tag, max_w: f32, s: &Sizes) -> Option<Node> {
+        let style = tag_style(tag.kind);
+
         let seg = [TextSegment {
-            text: text.to_string(),
-            color: Some(ADMIN_TAG_FG),
+            text: tag.text.clone(),
+            color: Some(style.fg),
             ..Default::default()
         }];
         let (img, _, _) = render_rich_text(&self.fonts, &seg, max_w, s.name_font_size * 0.8);
         let label = Node::leaf(Some(img), LeafOpts::default())?;
 
         let (px, py) = (6.0 * s.scale, 2.0 * s.scale);
-        let bg: NodeFn = Rc::new(|canvas: &Canvas, n: &Node| {
+        let bg: NodeFn = Rc::new(move |canvas: &Canvas, n: &Node| {
             let mut paint = Paint::default();
             paint.set_anti_alias(true);
-            paint.set_color(ADMIN_TAG_BG);
+            paint.set_color(style.bg);
             let r = n.h / 2.0;
             canvas.draw_round_rect(Rect::from_xywh(n.x, n.y, n.w, n.h), r, r, &paint);
         });

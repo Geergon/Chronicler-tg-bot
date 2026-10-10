@@ -5,6 +5,19 @@ use crate::render::UiConfig;
 
 // ---------- Data from message ----------
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TagKind {
+    Owner,
+    Admin,
+    Member,
+}
+
+#[derive(Debug, Clone)]
+pub struct Tag {
+    pub text: String,
+    pub kind: TagKind,
+}
+
 #[derive(Debug, Clone)]
 pub struct ReplyInfo {
     pub author_name: String,
@@ -28,7 +41,7 @@ pub struct TextSegment {
 pub struct QuoteParams {
     pub author_id: i64,
     pub author_name: String,
-    pub admin_tag: Option<String>,
+    pub tag: Option<Tag>,
     pub reply: Option<ReplyInfo>,
     pub segments: Vec<TextSegment>,
     pub bubble_color: Color,
@@ -41,7 +54,7 @@ pub struct MessageBlock {
     pub author_id: i64,
     pub author_name: String,
     pub avatar_img: Option<Image>, // None if don't show avatar (group messages from one user)
-    pub admin_tag: Option<String>,
+    pub tag: Option<Tag>,
     pub reply: Option<ReplyInfo>,
     pub standalone: bool,
     pub segments: Vec<TextSegment>,
@@ -54,7 +67,7 @@ pub struct ChatMessage {
     pub author_id: i64,
     pub author_name: String,
     pub avatar_img: Option<Image>,
-    pub admin_tag: Option<String>,
+    pub tag: Option<Tag>,
     pub standalone: bool,
     pub reply: Option<ReplyInfo>,
     pub segments: Vec<TextSegment>,

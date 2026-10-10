@@ -17,6 +17,8 @@ type MessageAuthor struct {
 	FirstName string
 	Username  string
 	IsBot     bool
+	Rank      string
+	Forwarded bool
 }
 
 type QuoteData struct {
@@ -47,6 +49,9 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 			return MessageAuthor{}
 		}
 		a := MessageAuthor{ID: peer.UserID}
+		if rank, ok := msg.GetFromRank(); ok {
+			a.Rank = rank
+		}
 		if u, ok := userMap[peer.UserID]; ok {
 			a.FirstName = u.FirstName
 			a.Username = u.Username
@@ -81,6 +86,7 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 	fwdAuthor, ok := resolveForwardAuthorFull(&replyMsg.FwdFrom, replyUsers, replyChatMap)
 	if ok && fwdAuthor.FirstName != "" {
 		author = fwdAuthor
+		author.Forwarded = true
 	}
 
 	if replyMsg == nil {
@@ -132,6 +138,9 @@ func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int,
 			return MessageAuthor{}
 		}
 		a := MessageAuthor{ID: peer.UserID}
+		if rank, ok := msg.GetFromRank(); ok {
+			a.Rank = rank
+		}
 		if u, ok := userMap[peer.UserID]; ok {
 			a.FirstName = u.FirstName
 			a.Username = u.Username
@@ -161,6 +170,7 @@ func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int,
 	fwdAuthor, ok := resolveForwardAuthorFull(&replyMsg.FwdFrom, replyUsers, replyChatMap)
 	if ok && fwdAuthor.FirstName != "" {
 		author = fwdAuthor
+		author.Forwarded = true
 	}
 
 	result := &QuoteData{
@@ -229,6 +239,11 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 			}
 		}
 
+		var tag *renderclient.Tag
+		if !quoteData.Author.Forwarded && quoteData.Author.ID != 0 {
+			tag = resolveTag(getChatRoles(ctx, chatID), quoteData.Author.ID, quoteData.Author.Rank)
+		}
+
 		// quoted text instead of actual text if user quoted part of the text in the /q command
 		text := quoteData.Text
 		entities := parseEntities(text, quoteData.replyMsg.Entities, color.RGBA{255, 255, 255, 255})
@@ -256,7 +271,7 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 			{
 				AuthorID:    authorID,
 				AuthorName:  authorName,
-				AdminTag:    adminTag(ctx, chatID, userID),
+				Tag:         tag,
 				Reply:       replyInfo,
 				Avatar:      avatar,
 				BubbleColor: color.RGBA{45, 40, 60, 255},
@@ -306,6 +321,8 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 	var avatar []byte
 	var cached bool
 
+	roles := getChatRoles(ctx, chatID)
+
 	for i, group := range groups {
 		mainMsg := group.Messages[0]
 
@@ -342,6 +359,11 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 		if replyHeader.Quote && replyHeader.QuoteText != "" && i == 0 {
 			text = replyHeader.QuoteText
 			entities = parseEntities(text, nil, color.RGBA{255, 255, 255, 255})
+		}
+
+		var tag *renderclient.Tag
+		if !quoteData.Author.Forwarded {
+			tag = resolveTag(roles, quoteData.Author.ID, quoteData.Author.Rank)
 		}
 
 		// var media []image.Image
@@ -381,7 +403,7 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 			AuthorID:    quoteData.Author.ID,
 			AuthorName:  quoteData.Author.FirstName,
 			Avatar:      avatar,
-			AdminTag:    adminTag(ctx, chatID, quoteData.Author.ID),
+			Tag:         tag,
 			Reply:       replyInfo,
 			BubbleColor: color.RGBA{45, 40, 60, 255},
 			Media:       quoteData.Media,
