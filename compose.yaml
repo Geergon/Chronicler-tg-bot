@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   renderer:
     build: ./renderer
@@ -10,7 +8,7 @@ services:
       retries: 10
       start_period: 20s
 
-  chronicler-tg-bot:
+  bot:
     # image: geergon/chronicler-tg-bot:latest
     build: ./bot
     container_name: chronicler-tg-bot
