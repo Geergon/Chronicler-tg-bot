@@ -1,10 +1,8 @@
 package tgbot
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"image/png"
 	"time"
 
 	"github.com/celestix/gotgproto/ext"
@@ -38,20 +36,11 @@ func renderAndSend(ctx *ext.Context, chatID int64, msgs []renderclient.Message) 
 	rctx, cancel := context.WithTimeout(ctx, 40*time.Second)
 	defer cancel()
 
-	pngData, err := renderer.Render(rctx, msgs)
+	buffs, err := renderer.Render(rctx, msgs)
 	if err != nil {
 		return fmt.Errorf("render: %w", err)
 	}
 
-	img, err := png.Decode(bytes.NewReader(pngData))
-	if err != nil {
-		return fmt.Errorf("decode rendered png: %w", err)
-	}
-
-	buffs, err := imageToWebP(img)
-	if err != nil {
-		return fmt.Errorf("imageToWebP: %w", err)
-	}
 	docClass, err := uploadMedia(ctx, chatID, buffs, "image/webp")
 	if err != nil {
 		return fmt.Errorf("uploadMedia: %w", err)

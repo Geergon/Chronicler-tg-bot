@@ -146,7 +146,7 @@ func (c *Client) Ping(ctx context.Context) error {
 	return nil
 }
 
-// Render returns PNG.
+// Render returns WebP.
 func (c *Client) Render(ctx context.Context, msgs []Message) ([]byte, error) {
 	body, contentType, err := buildBody(msgs)
 	if err != nil {

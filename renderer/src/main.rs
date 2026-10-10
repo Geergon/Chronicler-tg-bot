@@ -18,7 +18,7 @@ use std::{
 use anyhow::{Context, Result, anyhow, bail};
 use axum::{
     Router,
-    extract::{DefaultBodyLimit, Multipart, State},
+    extract::{DefaultBodyLimit, Multipart, State, Query},
     http::{StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -104,6 +104,23 @@ struct SegmentDto {
 }
 
 // ───────────────────────── DTO -> internal types ─────────────────────────
+
+const WEBP_QUALITIES: [u32; 3] = [90, 75, 60];
+const MAX_STICKER_BYTES: usize = 500 * 1024;
+
+fn encode_webp(img: &Image) -> Result<Vec<u8>> {
+    let mut last = Vec::new();
+    for q in WEBP_QUALITIES {
+        let data = img
+            .encode(None, EncodedImageFormat::WEBP, q)
+            .context("failed to encode WebP")?;
+        last = data.as_bytes().to_vec();
+        if last.len() <= MAX_STICKER_BYTES {
+            break;
+        }
+    }
+    Ok(last)
+}
 
 fn parse_color(s: &str) -> Result<Color> {
     let hex = s.trim_start_matches('#');
@@ -231,12 +248,12 @@ fn into_chat_messages(
     Ok(out)
 }
 
-fn encode_png(img: &Image) -> Result<Vec<u8>> {
-    let data = img
-        .encode(None, EncodedImageFormat::PNG, None)
-        .context("failed to encode PNG")?;
-    Ok(data.as_bytes().to_vec())
-}
+// fn encode_png(img: &Image) -> Result<Vec<u8>> {
+//     let data = img
+//         .encode(None, EncodedImageFormat::PNG, None)
+//         .context("failed to encode PNG")?;
+//     Ok(data.as_bytes().to_vec())
+// }
 
 // ───────────────────────── Workers ─────────────────────────
 
@@ -263,7 +280,7 @@ fn process(
         .build_sticker_chat_stack(&messages)
         .map_err(|e| JobError::Internal(e.to_string()))?;
 
-    encode_png(&sticker).map_err(|e| JobError::Internal(format!("{e:#}")))
+    encode_webp(&sticker).map_err(|e| JobError::Internal(format!("{e:#}")))
 }
 
 fn spawn_workers(n: usize, fonts_dir: &str, ui: UiConfig) -> Result<async_channel::Sender<Job>> {
@@ -296,6 +313,9 @@ fn spawn_workers(n: usize, fonts_dir: &str, ui: UiConfig) -> Result<async_channe
                     reply,
                 }) = rx.recv_blocking()
                 {
+                    if reply.is_closed() {
+                        continue;
+                    }
                     // catch panic
                     let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
                         process(&renderer, request, files)
@@ -408,7 +428,7 @@ async fn render_handler(
         .map_err(|_| AppError::internal("worker dropped the job"))?;
 
     match result {
-        Ok(png) => Ok(([(header::CONTENT_TYPE, "image/png")], png).into_response()),
+        Ok(png) => Ok(([(header::CONTENT_TYPE, "image/webp")], png).into_response()),
         Err(JobError::BadInput(msg)) => Err(AppError::bad_request(msg)),
         Err(JobError::Internal(msg)) => {
             eprintln!("render failed: {msg}");
