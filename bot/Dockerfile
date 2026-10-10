@@ -3,6 +3,7 @@ FROM golang:1.26.4-alpine AS builder
 WORKDIR /app
 
 COPY go.* ./ 
+COPY third_party/gotgproto/* ./
 
 RUN go mod download
 
