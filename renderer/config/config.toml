@@ -1,0 +1,18 @@
+[ui]
+padding_x = 10
+padding_y = 12
+name_font_size = 46
+reply_font_size = 36
+text_font_size = 50
+gap_after_name = 2
+gap_after_reply = 6
+reply_line_width = 5
+reply_line_gap = 1
+corner_radius = 18
+avatar_size = 45
+avatar_gap = 8
+vertical_gap = 4
+media_radius = 12
+media_group_gap = 6
+gap_after_media = 10
+bottom_margin = 14
