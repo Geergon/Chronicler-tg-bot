@@ -14,7 +14,6 @@ use std::{
     collections::HashMap,
     panic::AssertUnwindSafe,
     sync::{Arc, mpsc},
-    thread,
     time::Duration,
 };
 
@@ -87,6 +86,10 @@ struct MediaDto {
     part: String,
     #[serde(default)]
     spoiler: bool,
+    #[serde(default)]
+    video: bool,
+    #[serde(default)]
+    round: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -245,6 +248,8 @@ fn into_chat_messages(
                     media.push(MediaItem {
                         image: i,
                         spoiler: img.spoiler,
+                        video: img.video,
+                        round: img.round
                     });
                 }
                 Err(e) => {

@@ -59,6 +59,7 @@ type MediaItem struct {
 	Data    []byte
 	Spoiler bool
 	Video   bool
+	Round   bool
 }
 
 type Tag struct {
@@ -127,6 +128,7 @@ type wireMedia struct {
 	Part    string `json:"part"`
 	Spoiler bool   `json:"spoiler,omitempty"`
 	Video   bool   `json:"video,omitempty"`
+	Round   bool   `json:"round,omitempty"`
 }
 
 type wireTag struct {
@@ -297,6 +299,7 @@ func buildBody(msgs []Message) ([]byte, string, error) {
 					Part:    store.add(img.Data),
 					Spoiler: img.Spoiler,
 					Video:   img.Video,
+					Round:   img.Round,
 				})
 			}
 		}

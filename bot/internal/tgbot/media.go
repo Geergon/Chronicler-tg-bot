@@ -1,21 +1,32 @@
 package tgbot
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/exec"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/Geergon/Chronicler-tg-bot/internal/renderclient"
 	"github.com/celestix/gotgproto/ext"
 	"github.com/gotd/td/tg"
 )
 
+var ffmpegSem = make(chan struct{}, 2)
+
+const maxVideoForFFmpeg = 30 << 20 // 30 mb
+
 func fetchMediaGroup(ctx *ext.Context, chatID int64, msg *tg.Message) ([]renderclient.MediaItem, error) {
 	if msg.GroupedID == 0 {
-		var allMedia []renderclient.MediaItem
-		media, err := fetchMedia(ctx, msg)
-		allMedia = append(allMedia, media)
-		return allMedia, err
+		item, err := fetchMedia(ctx, msg)
+		if err != nil || len(item.Data) == 0 {
+			return nil, err
+		}
+		return []renderclient.MediaItem{item}, nil
 	}
 
 	const searchRange = 9
@@ -74,60 +85,107 @@ func fetchMediaGroup(ctx *ext.Context, chatID int64, msg *tg.Message) ([]renderc
 
 	var images []renderclient.MediaItem
 	for _, gm := range groupMsgs {
-		imgs, err := fetchMedia(ctx, gm)
+		item, err := fetchMedia(ctx, gm)
 		if err != nil {
 			log.Printf("fetchMediaGroup: skip msg %d: %v", gm.ID, err)
 			continue
 		}
-		images = append(images, imgs)
+		if len(item.Data) == 0 {
+			continue
+		}
+		images = append(images, item)
 	}
-
 	return images, nil
 }
 
 func fetchMedia(ctx *ext.Context, msg *tg.Message) (renderclient.MediaItem, error) {
-	if msg.Media == nil {
-		// log.Println("message doesn't contain media")
-		return renderclient.MediaItem{}, nil
+	switch m := msg.Media.(type) {
+	case *tg.MessageMediaPhoto:
+		return fetchPhoto(ctx, m)
+	case *tg.MessageMediaDocument:
+		return fetchVideoFrame(ctx, m)
 	}
+	return renderclient.MediaItem{}, nil
+}
 
-	mediaPhoto, ok := msg.Media.(*tg.MessageMediaPhoto)
-	if !ok {
-		// log.Println("media not photo")
-		return renderclient.MediaItem{}, nil
-	}
-
+func fetchPhoto(ctx *ext.Context, mediaPhoto *tg.MessageMediaPhoto) (renderclient.MediaItem, error) {
 	photo, ok := mediaPhoto.Photo.(*tg.Photo)
 	if !ok {
 		log.Println("failed to get photo object")
 		return renderclient.MediaItem{}, nil
 	}
 
-	log.Printf("fetchMedia: photo ID=%d sizes=%d", photo.ID, len(photo.Sizes))
-	// for _, s := range photo.Sizes {
-	// 	log.Printf(" media size type=%T %+v", s, s)
-	// }
-
 	bestSize := pickBestPhotoSize(photo.Sizes)
-	// log.Printf("fetchMedia: bestSize=%s", bestSize)
 	if bestSize == nil {
-		log.Printf("fetchMedia: no suitable size found")
+		log.Printf("fetchPhoto: no suitable size found")
 		return renderclient.MediaItem{}, nil
 	}
-	// log.Printf("fetchMedia: bestSize type=%s", bestSize.Type)
 
-	location := &tg.InputPhotoFileLocation{
+	data, err := downloadFile(ctx, &tg.InputPhotoFileLocation{
 		ID:            photo.ID,
 		AccessHash:    photo.AccessHash,
 		FileReference: photo.FileReference,
 		ThumbSize:     bestSize.Type,
-	}
-
-	data, err := downloadFile(ctx, location)
+	})
 	if err != nil {
 		return renderclient.MediaItem{}, err
 	}
-	return renderclient.MediaItem{Data: data, Spoiler: mediaPhoto.Spoiler}, err
+	return renderclient.MediaItem{Data: data, Spoiler: mediaPhoto.Spoiler}, nil
+}
+
+func isVideoLike(doc *tg.Document) bool {
+	for _, a := range doc.Attributes {
+		switch a.(type) {
+		case *tg.DocumentAttributeSticker, *tg.DocumentAttributeCustomEmoji:
+			return false // стікери й емодзі обробляються окремо
+		}
+	}
+	return strings.HasPrefix(doc.MimeType, "video/") || doc.MimeType == "image/gif"
+}
+
+func fetchVideoFrame(ctx *ext.Context, m *tg.MessageMediaDocument) (renderclient.MediaItem, error) {
+	doc, ok := m.Document.(*tg.Document)
+	if !ok || !isVideoLike(doc) {
+		return renderclient.MediaItem{}, nil
+	}
+
+	size := bestThumbSize(doc)
+	if size == "" {
+		log.Printf("video %d has no usable thumbnail", doc.ID)
+		if doc.Size > maxVideoForFFmpeg {
+			log.Printf("video %d is too large for ffmpeg (%d bytes), skipped", doc.ID, doc.Size)
+			return renderclient.MediaItem{}, nil
+		}
+		loc := func(thumb string) *tg.InputDocumentFileLocation {
+			return &tg.InputDocumentFileLocation{
+				ID:            doc.ID,
+				AccessHash:    doc.AccessHash,
+				FileReference: doc.FileReference,
+				ThumbSize:     thumb,
+			}
+		}
+		video, err := downloadFile(ctx, loc(""))
+		if err != nil {
+			return renderclient.MediaItem{}, err
+		}
+		frame, err := firstFrame(ctx, video)
+		if err != nil {
+			log.Printf("ffmpeg first frame %d: %v", doc.ID, err)
+			return renderclient.MediaItem{}, nil
+		}
+		return renderclient.MediaItem{Data: frame, Spoiler: m.Spoiler, Video: true}, nil
+	}
+
+	data, err := downloadFile(ctx, &tg.InputDocumentFileLocation{
+		ID:            doc.ID,
+		AccessHash:    doc.AccessHash,
+		FileReference: doc.FileReference,
+		ThumbSize:     size,
+	})
+	if err != nil {
+		return renderclient.MediaItem{}, err
+	}
+	return renderclient.MediaItem{Data: data, Spoiler: m.Spoiler, Video: true, Round: isRoundVideo(doc)}, nil
 }
 
 func pickBestPhotoSize(sizes []tg.PhotoSizeClass) *tg.PhotoSize {
@@ -184,16 +242,20 @@ func fetchStickerFromMessage(ctx *ext.Context, msg *tg.Message) (*tg.InputDocume
 		return nil, "", fmt.Errorf("document is not a sticker")
 	}
 
+	thumb := ""
 	mimeType := doc.MimeType
 	if mimeType != "image/webp" {
-		return nil, mimeType, fmt.Errorf("unsupported sticker type: %s (only static webp supported)", mimeType)
+		thumb = bestThumbSize(doc)
+		if thumb == "" {
+			return nil, doc.MimeType, fmt.Errorf("animated sticker %s has no usable thumbnail", doc.MimeType)
+		}
 	}
 
 	location := &tg.InputDocumentFileLocation{
 		ID:            doc.ID,
 		AccessHash:    doc.AccessHash,
 		FileReference: doc.FileReference,
-		ThumbSize:     "", // порожньо = оригінал
+		ThumbSize:     thumb,
 	}
 
 	return location, mimeType, nil
@@ -236,4 +298,51 @@ func downloadFileBytes(ctx *ext.Context, location tg.InputFileLocationClass) ([]
 
 func downloadFile(ctx *ext.Context, location tg.InputFileLocationClass) ([]byte, error) {
 	return downloadFileBytes(ctx, location)
+}
+
+func firstFrame(ctx context.Context, video []byte) ([]byte, error) {
+	ffmpegSem <- struct{}{}
+	defer func() { <-ffmpegSem }()
+
+	f, err := os.CreateTemp("", "vid-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(f.Name())
+	if _, err := f.Write(video); err != nil {
+		f.Close()
+		return nil, err
+	}
+	f.Close()
+
+	cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(cctx, "ffmpeg",
+		"-v", "error",
+		"-i", f.Name(),
+		"-frames:v", "1",
+		"-vf", "scale='min(1280,iw)':-2",
+		"-f", "image2pipe", "-c:v", "mjpeg", "-q:v", "3",
+		"pipe:1",
+	)
+	var out, stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("ffmpeg: %w: %s", err, stderr.String())
+	}
+	if out.Len() == 0 {
+		return nil, fmt.Errorf("ffmpeg returned no data")
+	}
+	return out.Bytes(), nil
+}
+
+func isRoundVideo(doc *tg.Document) bool {
+	for _, a := range doc.Attributes {
+		if v, ok := a.(*tg.DocumentAttributeVideo); ok && v.RoundMessage {
+			return true
+		}
+	}
+	return false
 }

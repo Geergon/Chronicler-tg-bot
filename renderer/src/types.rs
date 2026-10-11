@@ -81,6 +81,8 @@ pub struct ChatMessage {
 pub struct MediaItem {
     pub image: Image,
     pub spoiler: bool,
+    pub video: bool,
+    pub round: bool,
 }
 
 // ---------- Layout ----------

@@ -306,7 +306,7 @@ impl Renderer {
 
     pub fn build_sticker_chat_stack(&self, messages: &[ChatMessage]) -> Result<Image> {
         if is_standalone_media(messages) {
-            return Ok(build_standalone_media(&messages[0].media[0].image));
+            return Ok(build_standalone_media(&messages[0].media[0]));
         }
 
         // Pass 1: natural dimensions at scale = 1

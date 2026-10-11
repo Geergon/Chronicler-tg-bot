@@ -1,6 +1,9 @@
+use skia_safe::Color;
 use skia_safe::Image;
 
 use skia_safe::surfaces;
+use skia_safe::Paint;
+use skia_safe::PathBuilder;
 
 use crate::image::finalize_size;
 use crate::image::resize_image;
@@ -47,6 +50,9 @@ fn crop_to_square(img: &Image) -> Image {
 }
 
 pub fn single_media_leaf(media: &MediaItem, max_w: f32, s: &Sizes) -> Node {
+    if media.round {
+        return round_media_leaf(media, max_w, s);
+    }
     let max_height_ratio = s.media_max_height_ratio;
     let original = &media.image;
     let (src_w, src_h) = (original.width() as f32, original.height() as f32);
@@ -66,6 +72,8 @@ pub fn single_media_leaf(media: &MediaItem, max_w: f32, s: &Sizes) -> Node {
     let resized = resize_image(&source, w.round() as i32, h.round() as i32);
     let resized = if media.spoiler {
         apply_spoiler(&resized, s.scale)
+    } else if media.video {
+        with_play_badge(&resized)
     } else {
         resized
     };
@@ -95,10 +103,17 @@ fn media_group_row(images: &[MediaItem], max_w: f32, s: &Sizes) -> Node {
             let resized = resize_image(&square, side, side);
             let resized = if img.spoiler {
                 apply_spoiler(&resized, s.scale)
+            } else if img.video {
+                with_play_badge(&resized)
             } else {
                 resized
             };
-            let mut rounded = round_image(&resized, s.media_radius);
+            let radius = if img.round {
+                side as f32 / 2.0
+            } else {
+                s.media_radius
+            };
+            let mut rounded = round_image(&resized, radius);
             Node::leaf(
                 Some(rounded.image_snapshot()),
                 LeafOpts {
@@ -135,15 +150,21 @@ pub fn is_standalone_media(messages: &[ChatMessage]) -> bool {
     m.media.len() == 1 && !has_text && m.reply.is_none()
 }
 
-// for the future, if there is a need to add a spoiler for a standalone photo, then uncomment the comments and change &Image to &MediaItem
-pub fn build_standalone_media(img: &Image) -> Image {
-    finalize_size(img.clone())
-    // let img = finalize_size(item.image.clone());
-    // if item.spoiler {
-    //     apply_spoiler(&img, 2.0)
-    // } else {
-    //     img
-    // }
+pub fn build_standalone_media(m: &MediaItem) -> Image {
+    let img = finalize_size(m.image.clone());
+    let img = if m.spoiler {
+        apply_spoiler(&img, 2.0)
+    } else if m.video {
+        with_play_badge(&img)
+    } else {
+        img
+    };
+    if m.round {
+        let mut s = round_image(&img, img.width() as f32 / 2.0);
+        s.image_snapshot()
+    } else {
+        img
+    }
 }
 
 pub fn build_standalone_media_node(media: &[MediaItem], max_width: f32, s: &Sizes) -> Node {
@@ -151,4 +172,60 @@ pub fn build_standalone_media_node(media: &[MediaItem], max_width: f32, s: &Size
         return single_media_leaf(&media[0], max_width, s);
     }
     media_group_row(&media, max_width, s)
+}
+
+// video play icon
+pub fn with_play_badge(img: &Image) -> Image {
+    let (w, h) = (img.width(), img.height());
+    let mut surface = surfaces::raster_n32_premul((w, h)).expect("surface");
+    let canvas = surface.canvas();
+    canvas.draw_image(img, (0, 0), None);
+
+    let (cx, cy) = (w as f32 / 2.0, h as f32 / 2.0);
+    let r = (w.min(h) as f32 * 0.14).max(10.0);
+
+    // circle
+    let mut p = Paint::default();
+    p.set_anti_alias(true);
+    p.set_color(Color::from_argb(165, 0, 0, 0));
+    canvas.draw_circle((cx, cy), r, &p);
+
+    // triangle
+    let mut tri = PathBuilder::new();
+    tri.move_to((cx - r * 0.28, cy - r * 0.42));
+    tri.line_to((cx - r * 0.28, cy + r * 0.42));
+    tri.line_to((cx + r * 0.46, cy));
+    tri.close();
+    let path = tri.snapshot();
+
+    p.set_color(Color::from_argb(165, 255, 255, 255));
+    canvas.draw_path(&path, &p);
+
+    surface.image_snapshot()
+}
+
+fn round_media_leaf(media: &MediaItem, max_w: f32, s: &Sizes) -> Node {
+    let side = ((max_w * 0.75).round() as i32).max(1);
+
+    let square = crop_to_square(&media.image);
+    let resized = resize_image(&square, side, side);
+    let resized = if media.spoiler {
+        apply_spoiler(&resized, s.scale)
+    } else if media.video {
+        with_play_badge(&resized)
+    } else {
+        resized
+    };
+
+    let mut rounded = round_image(&resized, side as f32 / 2.0);
+
+    Node::leaf(
+        Some(rounded.image_snapshot()),
+        LeafOpts {
+            w: side as f32,
+            h: side as f32,
+            ..Default::default()
+        },
+    )
+    .unwrap()
 }
