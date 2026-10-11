@@ -1,4 +1,4 @@
-FROM rust as builder
+FROM rust AS builder
 RUN apt-get update && apt-get install -y clang pkg-config libfontconfig1-dev libfreetype6-dev ninja-build
 WORKDIR /app
 ADD Cargo.toml Cargo.lock ./

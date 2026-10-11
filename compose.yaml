@@ -1,6 +1,8 @@
 services:
   renderer:
     build: ./renderer
+    volumes:
+      - ./renderer/config:/config:z
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 5s
@@ -21,8 +23,7 @@ services:
       BOT_TOKEN: "${BOT_TOKEN:?Error: BOT_TOKEN not set in .env}"
       RENDERER_URL: http://renderer:8080
     volumes:
-      - ./config:/config:z
-      - ./db:/db:z
+      - ./bot/db:/db:z
     logging:
       driver: json-file
       options:

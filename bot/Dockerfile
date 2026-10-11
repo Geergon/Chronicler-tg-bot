@@ -17,6 +17,7 @@ COPY --from=builder /app/main /app
 
 RUN apk --no-cache add \
   bash \
+  ffmpeg \
   dumb-init
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
