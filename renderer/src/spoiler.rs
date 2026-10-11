@@ -1,4 +1,4 @@
-use skia_safe::{image_filters, surfaces, Color, Image, Paint, Rect, TileMode};
+use skia_safe::{Color, Image, Paint, Rect, TileMode, image_filters, surfaces};
 
 use crate::image::resize_image;
 

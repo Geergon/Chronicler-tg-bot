@@ -27,6 +27,7 @@ type Reply struct {
 	AuthorID   int64
 	AuthorName string
 	Text       string
+	Segments   []Segment
 }
 
 type Segment struct {
@@ -38,6 +39,8 @@ type Segment struct {
 	Strikethrough bool
 	Spoiler       bool
 	Color         color.Color
+	CustomEmojiID int64
+	EmojiImage    []byte
 }
 
 type Message struct {
@@ -55,6 +58,7 @@ type Message struct {
 type MediaItem struct {
 	Data    []byte
 	Spoiler bool
+	Video   bool
 }
 
 type Tag struct {
@@ -65,9 +69,10 @@ type Tag struct {
 // ───────────── JSON-contract with Rust backend ─────────────
 
 type wireReply struct {
-	AuthorID   int64  `json:"author_id"`
-	AuthorName string `json:"author_name"`
-	Text       string `json:"text"`
+	AuthorID   int64         `json:"author_id"`
+	AuthorName string        `json:"author_name"`
+	Text       string        `json:"text"`
+	Segments   []wireSegment `json:"segments,omitempty"`
 }
 
 type wireSegment struct {
@@ -79,6 +84,31 @@ type wireSegment struct {
 	Strikethrough bool    `json:"strikethrough,omitempty"`
 	Spoiler       bool    `json:"spoiler,omitempty"`
 	Color         *string `json:"color,omitempty"`
+	EmojiImage    *string `json:"emoji_image,omitempty"`
+}
+
+func toWireSegment(store *fileStore, s Segment) wireSegment {
+	ws := wireSegment{
+		Text: s.Text, Bold: s.Bold, Italic: s.Italic, Mono: s.Mono,
+		Underline: s.Underline, Strikethrough: s.Strikethrough, Spoiler: s.Spoiler,
+	}
+	if s.Color != nil {
+		c := hexColor(s.Color)
+		ws.Color = &c
+	}
+	if len(s.EmojiImage) > 0 {
+		name := store.add(s.EmojiImage)
+		ws.EmojiImage = &name
+	}
+	return ws
+}
+
+func toWireSegments(store *fileStore, segs []Segment) []wireSegment {
+	out := make([]wireSegment, 0, len(segs))
+	for _, s := range segs {
+		out = append(out, toWireSegment(store, s))
+	}
+	return out
 }
 
 type wireMessage struct {
@@ -96,6 +126,7 @@ type wireMessage struct {
 type wireMedia struct {
 	Part    string `json:"part"`
 	Spoiler bool   `json:"spoiler,omitempty"`
+	Video   bool   `json:"video,omitempty"`
 }
 
 type wireTag struct {
@@ -242,7 +273,7 @@ func buildBody(msgs []Message) ([]byte, string, error) {
 			AuthorName:  m.AuthorName,
 			Standalone:  m.Standalone,
 			BubbleColor: hexColor(m.BubbleColor),
-			Segments:    make([]wireSegment, 0, len(m.Segments)),
+			Segments:    toWireSegments(store, m.Segments),
 		}
 
 		if m.Tag != nil && m.Tag.TagText != "" {
@@ -257,25 +288,18 @@ func buildBody(msgs []Message) ([]byte, string, error) {
 				AuthorID:   m.Reply.AuthorID,
 				AuthorName: m.Reply.AuthorName,
 				Text:       m.Reply.Text,
+				Segments:   toWireSegments(store, m.Reply.Segments),
 			}
 		}
 		for _, img := range m.Media {
 			if len(img.Data) > 0 {
-				wm.Media = append(wm.Media, wireMedia{Part: store.add(img.Data), Spoiler: img.Spoiler})
+				wm.Media = append(wm.Media, wireMedia{
+					Part:    store.add(img.Data),
+					Spoiler: img.Spoiler,
+					Video:   img.Video,
+				})
 			}
 		}
-		for _, s := range m.Segments {
-			ws := wireSegment{
-				Text: s.Text, Bold: s.Bold, Italic: s.Italic, Mono: s.Mono,
-				Underline: s.Underline, Strikethrough: s.Strikethrough, Spoiler: s.Spoiler,
-			}
-			if s.Color != nil {
-				c := hexColor(s.Color)
-				ws.Color = &c
-			}
-			wm.Segments = append(wm.Segments, ws)
-		}
-
 		req.Messages = append(req.Messages, wm)
 	}
 

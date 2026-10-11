@@ -324,6 +324,7 @@ func parseEntities(text string, entities []tg.MessageEntityClass, defaultColor c
 		Strikethrough bool
 		Spoiler       bool
 		Mention       bool
+		CustomEmoji   int64
 	}
 
 	styles := make([]runeStyle, runeLen)
@@ -364,6 +365,10 @@ func parseEntities(text string, entities []tg.MessageEntityClass, defaultColor c
 				offset, length = em.Offset, em.Length
 			}
 			applyFn = func(s *runeStyle) { s.Mention = true }
+		case *tg.MessageEntityCustomEmoji:
+			offset, length = e.Offset, e.Length
+			id := e.DocumentID
+			applyFn = func(s *runeStyle) { s.CustomEmoji = id }
 		default:
 			continue
 		}
@@ -418,6 +423,7 @@ func parseEntities(text string, entities []tg.MessageEntityClass, defaultColor c
 				Underline:     s.Underline,
 				Strikethrough: s.Strikethrough,
 				Spoiler:       s.Spoiler,
+				CustomEmojiID: s.CustomEmoji,
 			}
 
 			switch {

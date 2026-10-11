@@ -30,7 +30,10 @@ type QuoteData struct {
 	ChatMap  map[int64]tg.ChatClass
 	UserMap  map[int64]*tg.User
 	replyMsg *tg.Message
+	Entities []tg.MessageEntityClass
 }
+
+var replyTextColor = color.RGBA{209, 209, 209, 255}
 
 func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteData, error) {
 	resolveAuthor := func(msg *tg.Message, userMap map[int64]*tg.User) MessageAuthor {
@@ -106,12 +109,15 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 		author := resolveAuthor(innerMsg, innerUsers)
 		if err == nil && innerMsg != nil {
 			text := innerMsg.Message
+			entities := innerMsg.Entities
 			if innerReply.Quote && innerReply.QuoteText != "" {
 				text = innerReply.QuoteText
+				entities = innerReply.QuoteEntities
 			}
 			result.ReplyTo = &QuoteData{
-				Author: author,
-				Text:   text,
+				Author:   author,
+				Text:     text,
+				Entities: entities,
 			}
 		}
 	}
@@ -185,12 +191,15 @@ func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int,
 		author := resolveAuthor(innerMsg, innerUsers)
 		if err == nil && innerMsg != nil {
 			text := innerMsg.Message
+			entities := innerMsg.Entities
 			if innerReply.Quote && innerReply.QuoteText != "" {
 				text = innerReply.QuoteText
+				entities = innerReply.QuoteEntities
 			}
 			result.ReplyTo = &QuoteData{
-				Author: author,
-				Text:   text,
+				Author:   author,
+				Text:     text,
+				Entities: entities,
 			}
 		}
 	}
@@ -234,11 +243,14 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 				if quoteData.ReplyTo.Author.LastName != "" {
 					authorName = quoteData.ReplyTo.Author.FirstName + " " + quoteData.ReplyTo.Author.LastName
 				}
+				entities := parseEntities(quoteData.ReplyTo.Text, quoteData.ReplyTo.Entities, replyTextColor)
 				replyInfo = &renderclient.Reply{
 					AuthorID:   quoteData.ReplyTo.Author.ID,
 					AuthorName: authorName,
 					Text:       quoteData.ReplyTo.Text,
+					Segments:   entities,
 				}
+				attachCustomEmoji(ctx, entities)
 			}
 		}
 
@@ -249,11 +261,14 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 
 		// quoted text instead of actual text if user quoted part of the text in the /q command
 		text := quoteData.Text
-		entities := parseEntities(text, quoteData.replyMsg.Entities, color.RGBA{255, 255, 255, 255})
+		var entities []renderclient.Segment
 		if replyHeader.Quote && replyHeader.QuoteText != "" {
 			text = replyHeader.QuoteText
 			entities = parseEntities(text, replyHeader.QuoteEntities, color.RGBA{255, 255, 255, 255})
+		} else {
+			entities = parseEntities(text, quoteData.replyMsg.Entities, color.RGBA{255, 255, 255, 255})
 		}
+		attachCustomEmoji(ctx, entities)
 
 		authorID := quoteData.Author.ID
 		authorName := quoteData.Author.FirstName
@@ -269,9 +284,6 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 		}
 
 		avatar := getAvatar(ctx, authorID, quoteData.Author.Username, quoteData.UserMap, quoteData.ChatMap)
-		if err != nil {
-			log.Printf("fetchAvatar: %v", err)
-		}
 
 		messages := []renderclient.Message{
 			{
@@ -326,7 +338,7 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 
 	roles := getChatRoles(ctx, chatID)
 
-	for i, group := range groups {
+	for _, group := range groups {
 		var avatar []byte
 		mainMsg := group.Messages[0]
 
@@ -353,36 +365,32 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 				if quoteData.ReplyTo.Author.LastName != "" {
 					authorName = quoteData.ReplyTo.Author.FirstName + " " + quoteData.ReplyTo.Author.LastName
 				}
+				entities := parseEntities(quoteData.ReplyTo.Text, quoteData.ReplyTo.Entities, replyTextColor)
 				replyInfo = &renderclient.Reply{
 					AuthorID:   quoteData.ReplyTo.Author.ID,
 					AuthorName: authorName,
 					Text:       quoteData.ReplyTo.Text,
+					Segments:   entities,
 				}
+				attachCustomEmoji(ctx, entities)
 			}
 		}
 
 		// quoted text instead of actual text if user quoted part of the text in the /q command
 		text := quoteData.Text
-		entities := parseEntities(text, quoteData.replyMsg.Entities, color.RGBA{255, 255, 255, 255})
-		if replyHeader.Quote && replyHeader.QuoteText != "" && i == 0 {
+		var entities []renderclient.Segment
+		if replyHeader.Quote && replyHeader.QuoteText != "" {
 			text = replyHeader.QuoteText
-			entities = parseEntities(text, nil, color.RGBA{255, 255, 255, 255})
+			entities = parseEntities(text, replyHeader.QuoteEntities, color.RGBA{255, 255, 255, 255})
+		} else {
+			entities = parseEntities(text, quoteData.replyMsg.Entities, color.RGBA{255, 255, 255, 255})
 		}
+		attachCustomEmoji(ctx, entities)
 
 		var tag *renderclient.Tag
 		if !quoteData.Author.Forwarded {
 			tag = resolveTag(roles, quoteData.Author.ID, quoteData.Author.Rank)
 		}
-
-		// var media []image.Image
-		// for _, msg := range group.Messages {
-		// 	imgs, err := fetchMedia(ctx, msg)
-		// 	if err != nil {
-		// 		log.Printf("fetchMedia for msg %d: %v", msg.ID, err)
-		// 		continue
-		// 	}
-		// 	media = append(media, imgs...)
-		// }
 
 		authorID := quoteData.Author.ID
 		authorName := quoteData.Author.FirstName

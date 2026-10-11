@@ -83,8 +83,13 @@ impl Renderer {
                 ..Default::default()
             }];
 
-            let (name_img, _, _) =
-                render_rich_text(&self.fonts, &name_segs, max_content_width, s.name_font_size);
+            let (name_img, _, _) = render_rich_text(
+                &self.fonts,
+                &name_segs,
+                max_content_width,
+                s.name_font_size,
+                None,
+            );
             let name_leaf = Node::leaf(Some(name_img), LeafOpts::default());
 
             match tag {
@@ -106,25 +111,29 @@ impl Renderer {
             let reply_text_max_width = max_content_width - s.reply_line_width - s.reply_line_gap;
             let accent = name_color_from_id(reply.author_id);
 
-            let reply_segs = [
-                TextSegment {
-                    text: format!("{}\n", reply.author_name),
-                    bold: true,
-                    color: Some(accent),
-                    ..Default::default()
-                },
-                TextSegment {
+            let mut reply_segs = vec![TextSegment {
+                text: format!("{}\n", reply.author_name),
+                bold: true,
+                color: Some(accent),
+                ..Default::default()
+            }];
+
+            if reply.segments.is_empty() {
+                reply_segs.push(TextSegment {
                     text: reply.text.clone(),
                     color: Some(REPLY_TEXT_COLOR),
                     ..Default::default()
-                },
-            ];
+                });
+            } else {
+                reply_segs.extend(reply.segments.iter().cloned());
+            }
 
             let (reply_img, _, reply_h) = render_rich_text(
                 &self.fonts,
                 &reply_segs,
                 reply_text_max_width,
                 s.reply_font_size,
+                Some(2),
             );
 
             let line_img = draw_reply_line(s.reply_line_width, reply_h, accent);
@@ -146,6 +155,7 @@ impl Renderer {
             &p.segments,
             max_content_width,
             s.text_font_size,
+            None,
         );
         let has_text = text_w > 0.0;
 
@@ -328,7 +338,7 @@ impl Renderer {
             color: Some(style.fg),
             ..Default::default()
         }];
-        let (img, _, _) = render_rich_text(&self.fonts, &seg, max_w, s.name_font_size * 0.8);
+        let (img, _, _) = render_rich_text(&self.fonts, &seg, max_w, s.name_font_size * 0.8, None);
         let label = Node::leaf(Some(img), LeafOpts::default())?;
 
         let (px, py) = (6.0 * s.scale, 2.0 * s.scale);

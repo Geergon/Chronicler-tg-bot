@@ -23,6 +23,7 @@ pub struct ReplyInfo {
     pub author_name: String,
     pub author_id: i64,
     pub text: String,
+    pub segments: Vec<TextSegment>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -35,6 +36,7 @@ pub struct TextSegment {
     pub underline: bool,
     pub strikethrough: bool,
     pub spoiler: bool,
+    pub emoji_image: Option<Image>,
 }
 
 #[derive(Debug, Clone)]

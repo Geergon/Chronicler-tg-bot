@@ -1,14 +1,16 @@
-use crate::{fonts::*, types::TextSegment};
+use crate::{fonts::*, image::resize_image, types::TextSegment};
 use skia_safe::{
-    Color, FontStyle, Image, Paint,
     font_style::{Slant, Weight, Width},
     surfaces,
     textlayout::{
-        FontCollection, ParagraphBuilder, ParagraphStyle, TextAlign, TextDecoration, TextStyle,
+        FontCollection, ParagraphBuilder, ParagraphStyle, PlaceholderAlignment, PlaceholderStyle,
+        TextAlign, TextBaseline, TextDecoration, TextStyle,
     },
+    Color, FontStyle, Image, Paint,
 };
 
 pub const MONO_FAMILIES: &[&str] = &[NOTO_MONO, NOTO_CJK, NOTO_CUNEIFORM, NOTO_EMOJI];
+const EMOJI_SCALE: f32 = 1.15;
 
 fn make_text_style(seg: &TextSegment, font_size: f32) -> TextStyle {
     let color = seg.color.unwrap_or(Color::WHITE);
@@ -87,6 +89,7 @@ pub fn render_rich_text(
     segments: &[TextSegment],
     max_width: f32,
     font_size: f32,
+    max_lines: Option<usize>,
 ) -> (Image, f32, f32) {
     let empty = || {
         let mut s = surfaces::raster_n32_premul((1, 1)).expect("surface");
@@ -97,18 +100,45 @@ pub fn render_rich_text(
         return empty();
     }
 
+    let emoji_size = font_size * EMOJI_SCALE;
+    let mut emoji_images: Vec<Image> = Vec::new();
+
     let mut para_style = ParagraphStyle::new();
     para_style.set_text_align(TextAlign::Left);
+    if let Some(n) = max_lines {
+        para_style.set_max_lines(n);
+        para_style.set_ellipsis("…");
+    }
 
     let mut builder = ParagraphBuilder::new(&para_style, fonts.clone());
     for seg in segments.iter().filter(|s| !s.text.is_empty()) {
-        builder.push_style(&make_text_style(seg, font_size));
-        builder.add_text(&seg.text);
-        builder.pop();
+        match (&seg.emoji_image, seg.spoiler) {
+            (Some(img), false) => {
+                // custom tg emoji
+                builder.add_placeholder(&PlaceholderStyle::new(
+                    emoji_size,
+                    emoji_size,
+                    PlaceholderAlignment::Baseline,
+                    TextBaseline::Alphabetic,
+                    emoji_size * 0.85,
+                ));
+                emoji_images.push(img.clone());
+            }
+            _ => {
+                // regular text and emoji
+                builder.push_style(&make_text_style(seg, font_size));
+                builder.add_text(&seg.text);
+                builder.pop();
+            }
+        }
     }
     let mut paragraph = builder.build();
 
-    shrink_wrap(&mut paragraph, max_width);
+    if max_lines.is_some() {
+        paragraph.layout(max_width);
+    } else {
+        shrink_wrap(&mut paragraph, max_width);
+    }
 
     let (w, h) = (paragraph.longest_line(), paragraph.height());
     if w <= 0.0 || h <= 0.0 {
@@ -118,6 +148,19 @@ pub fn render_rich_text(
     let mut surface =
         surfaces::raster_n32_premul((w.ceil() as i32, h.ceil() as i32)).expect("surface");
     paragraph.paint(surface.canvas(), (0.0, 0.0));
+
+    // Emoji pictures on top of reserved space
+    for (tb, img) in paragraph
+        .get_rects_for_placeholders()
+        .iter()
+        .zip(&emoji_images)
+    {
+        let r = tb.rect;
+        let rw = (r.width().round() as i32).max(1);
+        let rh = (r.height().round() as i32).max(1);
+        let scaled = resize_image(img, rw, rh);
+        surface.canvas().draw_image(&scaled, (r.left, r.top), None);
+    }
 
     (surface.image_snapshot(), w, h)
 }
