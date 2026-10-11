@@ -1,6 +1,8 @@
 services:
   renderer:
     build: ./renderer
+    # image: geergon/chronicler-renderer:latest
+    container_name: chronicler-renderer
     restart: unless-stopped
     volumes:
       - ./config:/app/config:z
