@@ -1,23 +1,25 @@
 use std::{
     fs,
     path::Path,
-    sync::{Arc, mpsc::channel},
+    sync::{mpsc::channel, Arc},
     time::Duration,
 };
 
 use anyhow::Result;
 use arc_swap::ArcSwap;
 use notify::{
-    Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher, event::ModifyKind,
+    event::ModifyKind, Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher,
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Config {
+    #[serde(default)]
     pub ui: UiConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct UiConfig {
     pub padding_x: i32,
     pub padding_y: i32,
@@ -100,6 +102,10 @@ impl ConfigManager {
         })
     }
 
+    pub fn ui(&self) -> UiConfig {
+        self.config.load().ui.clone()
+    }
+
     fn load_from_file(path: &str) -> Result<Config> {
         let content = fs::read_to_string(&path)?;
         let config: Config = toml::from_str(&content)?;
@@ -107,9 +113,9 @@ impl ConfigManager {
         Ok(config)
     }
 
-    pub fn get(&self) -> arc_swap::Guard<Arc<Config>> {
-        self.config.load()
-    }
+    // pub fn get(&self) -> arc_swap::Guard<Arc<Config>> {
+    //     self.config.load()
+    // }
 
     pub fn reload(&self) -> Result<()> {
         let new_config = Self::load_from_file(&self.path)?;
@@ -139,28 +145,25 @@ impl ConfigManager {
             // Keep watcher alive
             let _watcher = watcher;
 
-            for event in rx {
-                let is_target_file = event
+            for event in rx.iter() {
+                let is_target = event
                     .paths
                     .iter()
                     .any(|p| p.file_name() == target_file_name);
+                let relevant = matches!(
+                    event.kind,
+                    notify::EventKind::Create(_) | notify::EventKind::Modify(_)
+                );
 
-                if is_target_file {
-                    let is_data_modified =
-                        matches!(event.kind, notify::EventKind::Modify(ModifyKind::Data(_)));
-                    let is_created = event.kind.is_create();
+                if !(is_target && relevant) {
+                    continue;
+                }
 
-                    if is_data_modified || is_created {
-                        println!("Config file changed, reloading...");
+                while rx.recv_timeout(Duration::from_millis(200)).is_ok() {}
 
-                        // Small delay to ensure file write is complete
-                        std::thread::sleep(Duration::from_millis(100));
-
-                        match manager.reload() {
-                            Ok(()) => println!("Configuration reloaded successfully"),
-                            Err(e) => eprintln!("Failed to reload config: {}", e),
-                        }
-                    }
+                match manager.reload() {
+                    Ok(()) => println!("Configuration reloaded successfully"),
+                    Err(e) => eprintln!("Failed to reload config: {}", e),
                 }
             }
         });

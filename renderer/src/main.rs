@@ -333,20 +333,20 @@ fn process(
     encode_webp(&sticker).map_err(|e| JobError::Internal(format!("{e:#}")))
 }
 
-fn spawn_workers(n: usize, fonts_dir: &str, ui: UiConfig) -> Result<async_channel::Sender<Job>> {
+fn spawn_workers(n: usize, fonts_dir: &str, config: Arc<ConfigManager>) -> Result<async_channel::Sender<Job>> {
     let (tx, rx) = async_channel::bounded::<Job>(QUEUE_SIZE);
     let (ready_tx, ready_rx) = mpsc::channel::<std::result::Result<(), String>>();
 
     for id in 0..n {
+        let config = config.clone();
         let rx = rx.clone();
         let ready_tx = ready_tx.clone();
-        let ui = ui.clone();
         let fonts_dir = fonts_dir.to_string();
 
         std::thread::Builder::new()
             .name(format!("render-{id}"))
             .spawn(move || {
-                let renderer = match Renderer::new(&fonts_dir, ui) {
+                let mut renderer = match Renderer::new(&fonts_dir, config.ui()) {
                     Ok(r) => {
                         let _ = ready_tx.send(Ok(()));
                         r
@@ -366,6 +366,7 @@ fn spawn_workers(n: usize, fonts_dir: &str, ui: UiConfig) -> Result<async_channe
                     if reply.is_closed() {
                         continue;
                     }
+                    renderer.ui = config.ui();
                     // catch panic
                     let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
                         process(&renderer, request, files)
@@ -523,11 +524,11 @@ async fn main() -> Result<()> {
     let port: u16 = env_or("PORT", 8080);
     let workers: usize = env_or("WORKERS", 2).max(1);
     let fonts_dir = std::env::var("FONTS_DIR").unwrap_or_else(|_| "./fonts".into());
-    let config_manager = ConfigManager::new()?;
-    ConfigManager::watch_for_changes(Arc::new(config_manager))?;
+    let config_manager = Arc::new(ConfigManager::new()?);
+    ConfigManager::watch_for_changes(config_manager.clone())?;
 
     println!("loading fonts from {fonts_dir} in {workers} worker(s)...");
-    let jobs = spawn_workers(workers, &fonts_dir, UiConfig::default())?;
+    let jobs = spawn_workers(workers, &fonts_dir, config_manager.clone())?;
     println!("workers ready");
 
     let app = Router::new()
