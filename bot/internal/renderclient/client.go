@@ -54,6 +54,7 @@ type Message struct {
 	Segments    []Segment
 	BubbleColor color.Color
 	Media       []MediaItem
+	NameEmoji   []byte // emoji status
 }
 
 type MediaItem struct {
@@ -123,6 +124,7 @@ type wireMessage struct {
 	Segments    []wireSegment `json:"segments"`
 	BubbleColor string        `json:"bubble_color"`
 	Media       []wireMedia   `json:"media,omitempty"`
+	NameEmoji   *string       `json:"name_emoji,omitempty"`
 }
 
 type wireMedia struct {
@@ -286,6 +288,10 @@ func buildBody(msgs []Message) ([]byte, string, error) {
 		if len(m.Avatar) > 0 {
 			name := store.add(m.Avatar)
 			wm.Avatar = &name
+		}
+		if len(m.NameEmoji) > 0 {
+			name := store.add(m.NameEmoji)
+			wm.NameEmoji = &name
 		}
 		if m.Reply != nil {
 			wm.Reply = &wireReply{

@@ -239,6 +239,7 @@ func resolveForwardAuthorFull(
 
 			fwdAuthor.FirstName = name
 			fwdAuthor.ID = id
+			fwdAuthor.StatusEmojiID = statusEmojiID(u)
 		}
 
 	case *tg.PeerChannel:

@@ -116,75 +116,30 @@ func main() {
 			})))
 	}
 
-	dispatcher.AddHandler(handlers.NewCommand("c", func(ctx *ext.Context, update *ext.Update) error {
-		go func() {
-			log.Println("/c command processing")
-			if err := tgbot.HandleQuote(ctx, update, false); err != nil {
-				log.Printf("quote error: %v", err)
-			}
-		}()
-		return nil
-	}))
-
-	dispatcher.AddHandler(handlers.NewCommand("q", func(ctx *ext.Context, update *ext.Update) error {
-		go func() {
-			log.Println("/q command processing")
-			if err := tgbot.HandleQuote(ctx, update, false); err != nil {
-				log.Printf("quote error: %v", err)
-			}
-		}()
-		return nil
-	}))
-
-	dispatcher.AddHandler(handlers.NewCommand("cr", func(ctx *ext.Context, update *ext.Update) error {
-		go func() {
-			log.Println("/cr command processing")
-			if err := tgbot.HandleQuote(ctx, update, true); err != nil {
-				log.Printf("quote error: %v", err)
-			}
-		}()
-		return nil
-	}))
-
-	dispatcher.AddHandler(handlers.NewCommand("qr", func(ctx *ext.Context, update *ext.Update) error {
-		go func() {
-			log.Println("/qr command processing")
-			if err := tgbot.HandleQuote(ctx, update, true); err != nil {
-				log.Printf("quote error: %v", err)
-			}
-		}()
-		return nil
-	}))
-
-	dispatcher.AddHandler(handlers.NewCommand("cs", func(ctx *ext.Context, update *ext.Update) error {
-		go func() {
-			log.Println("/cs command processing")
-			if err := tgbot.HandleSaveSticker(ctx, update, chatStickerSetDb, quotesDb, client.Self.Username, botToken); err != nil {
+	dispatcher.AddHandler(handlers.NewCommand("cs", tgbot.Guard("cs",
+		func(ctx *ext.Context, u *ext.Update) error {
+			if err := tgbot.HandleSaveSticker(ctx, u, chatStickerSetDb, quotesDb, client.Self.Username, botToken); err != nil {
 				log.Printf("sticker set error: %v", err)
 			}
-		}()
-		return nil
-	}))
+			return nil
+		})))
 
-	dispatcher.AddHandler(handlers.NewCommand("crand", func(ctx *ext.Context, update *ext.Update) error {
-		go func() {
-			log.Println("/crand command processing")
-			if err := tgbot.HandleRandomQuotes(ctx, update, quotesDb, botToken); err != nil {
+	dispatcher.AddHandler(handlers.NewCommand("crand", tgbot.Guard("cs",
+		func(ctx *ext.Context, u *ext.Update) error {
+			if err := tgbot.HandleRandomQuotes(ctx, u, quotesDb, botToken); err != nil {
 				log.Printf("random quotes error: %v", err)
 			}
-		}()
-		return nil
-	}))
+			return nil
+		})))
 
-	dispatcher.AddHandler(handlers.NewCommand("crsave", func(ctx *ext.Context, update *ext.Update) error {
-		go func() {
+	dispatcher.AddHandler(handlers.NewCommand("crsave", tgbot.Guard("cs",
+		func(ctx *ext.Context, u *ext.Update) error {
 			log.Println("/crsave command processing")
-			if err := tgbot.SaveStickerSetInDB(ctx, update, quotesDb, botToken); err != nil {
+			if err := tgbot.SaveStickerSetInDB(ctx, u, quotesDb, botToken); err != nil {
 				log.Printf("save stickerset in db error: %v", err)
 			}
-		}()
-		return nil
-	}))
+			return nil
+		})))
 
 	dispatcher.AddHandler(handlers.NewCommand("start", func(ctx *ext.Context, u *ext.Update) error {
 		chatID := u.EffectiveChat().GetID()

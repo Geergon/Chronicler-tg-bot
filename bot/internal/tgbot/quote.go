@@ -14,13 +14,14 @@ import (
 )
 
 type MessageAuthor struct {
-	ID        int64
-	FirstName string
-	LastName  string
-	Username  string
-	IsBot     bool
-	Rank      string
-	Forwarded bool
+	ID            int64
+	FirstName     string
+	LastName      string
+	Username      string
+	IsBot         bool
+	Rank          string
+	Forwarded     bool
+	StatusEmojiID int64 // 0 = no emoji status
 }
 
 type QuoteData struct {
@@ -62,6 +63,7 @@ func extractQuoteData(ctx *ext.Context, chatID int64, replyToMsgID int) (*QuoteD
 			a.LastName = u.LastName
 			a.Username = u.Username
 			a.IsBot = u.Bot
+			a.StatusEmojiID = statusEmojiID(u)
 		}
 		return a
 	}
@@ -151,6 +153,7 @@ func extractQuoteDataFromStack(ctx *ext.Context, chatID int64, replyToMsgID int,
 			a.LastName = u.LastName
 			a.Username = u.Username
 			a.IsBot = u.Bot
+			a.StatusEmojiID = statusEmojiID(u)
 		}
 		return a
 	}
@@ -292,6 +295,11 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 			}
 		}
 
+		var nameEmoji []byte
+		if id := quoteData.Author.StatusEmojiID; id != 0 {
+			nameEmoji = loadCustomEmoji(ctx, []int64{id})[id]
+		}
+
 		avatar := getAvatar(ctx, authorID, quoteData.Author.Username, quoteData.UserMap, quoteData.ChatMap)
 		lg("avatar: %d bytes", len(avatar))
 
@@ -305,6 +313,7 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 				BubbleColor: color.RGBA{45, 40, 60, 255},
 				Media:       quoteData.Media,
 				Segments:    entities,
+				NameEmoji:   nameEmoji,
 			},
 		}
 
@@ -408,6 +417,11 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 			authorName = quoteData.Author.FirstName + " " + quoteData.Author.LastName
 		}
 
+		var nameEmoji []byte
+		if id := quoteData.Author.StatusEmojiID; id != 0 && !quoteData.Author.Forwarded {
+			nameEmoji = loadCustomEmoji(ctx, []int64{id})[id]
+		}
+
 		avatar = getAvatar(ctx, authorID, quoteData.Author.Username, users, chatMap)
 
 		chatMessages = append(chatMessages, renderclient.Message{
@@ -419,6 +433,7 @@ func handleMessageStack(ctx *ext.Context, chatID int64, replyToMsgID int, number
 			BubbleColor: color.RGBA{45, 40, 60, 255},
 			Media:       quoteData.Media,
 			Segments:    entities,
+			NameEmoji:   nameEmoji,
 		})
 	}
 

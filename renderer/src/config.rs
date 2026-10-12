@@ -1,7 +1,7 @@
 use std::{
     fs,
     path::Path,
-    sync::{mpsc::channel, Arc},
+    sync::{Arc, mpsc::channel},
     time::Duration,
 };
 

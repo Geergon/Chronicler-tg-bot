@@ -79,6 +79,7 @@ struct MessageDto {
     bubble_color: String, // "#RRGGBB" or "#AARRGGBB"
     #[serde(default)]
     media: Vec<MediaDto>, // multipart-part name
+    name_emoji: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -240,6 +241,16 @@ fn into_chat_messages(
             },
             None => None,
         };
+        let name_emoji = match &m.name_emoji {
+            Some(name) => match store.get(name) {
+                Ok(img) => Some(img),
+                Err(e) => {
+                    eprintln!("message #{i}: name emoji skipped: {e:#}");
+                    None
+                }
+            },
+            None => None,
+        };
 
         let mut media: Vec<MediaItem> = vec![];
         for img in m.media {
@@ -249,7 +260,7 @@ fn into_chat_messages(
                         image: i,
                         spoiler: img.spoiler,
                         video: img.video,
-                        round: img.round
+                        round: img.round,
                     });
                 }
                 Err(e) => {
@@ -292,6 +303,7 @@ fn into_chat_messages(
             segments,
             bubble_color: parse_color(&m.bubble_color).with_context(ctx)?,
             media,
+            name_emoji,
         });
     }
 
@@ -333,7 +345,11 @@ fn process(
     encode_webp(&sticker).map_err(|e| JobError::Internal(format!("{e:#}")))
 }
 
-fn spawn_workers(n: usize, fonts_dir: &str, config: Arc<ConfigManager>) -> Result<async_channel::Sender<Job>> {
+fn spawn_workers(
+    n: usize,
+    fonts_dir: &str,
+    config: Arc<ConfigManager>,
+) -> Result<async_channel::Sender<Job>> {
     let (tx, rx) = async_channel::bounded::<Job>(QUEUE_SIZE);
     let (ready_tx, ready_rx) = mpsc::channel::<std::result::Result<(), String>>();
 

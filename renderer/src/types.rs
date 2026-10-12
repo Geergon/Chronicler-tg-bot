@@ -49,6 +49,7 @@ pub struct QuoteParams {
     pub bubble_color: Color,
     pub max_bubble_width: f32,
     pub media: Vec<MediaItem>,
+    pub name_emoji: Option<Image>,
 }
 
 #[derive(Debug, Clone)]
@@ -62,6 +63,7 @@ pub struct MessageBlock {
     pub segments: Vec<TextSegment>,
     pub bubble_color: Color,
     pub media: Vec<MediaItem>,
+    pub name_emoji: Option<Image>,
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +77,7 @@ pub struct ChatMessage {
     pub segments: Vec<TextSegment>,
     pub bubble_color: Color,
     pub media: Vec<MediaItem>,
+    pub name_emoji: Option<Image>,
 }
 
 #[derive(Debug, Clone)]

@@ -3,6 +3,7 @@ package tgbot
 import (
 	"log"
 	"sync"
+	"time"
 
 	"github.com/celestix/gotgproto/ext"
 	"github.com/gotd/td/tg"
@@ -39,28 +40,74 @@ func (c *emojiCacheT) put(id int64, b []byte) {
 }
 
 func attachCustomEmoji(ctx *ext.Context, segs []renderclient.Segment) {
+	var ids []int64
 	seen := map[int64]bool{}
-	var need []int64
 	for _, s := range segs {
-		id := s.CustomEmojiID
-		if id == 0 || seen[id] {
+		if id := s.CustomEmojiID; id != 0 && !seen[id] && len(seen) < maxCustomEmojiPerQuote {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	imgs := loadCustomEmoji(ctx, ids)
+	for i := range segs {
+		if b, ok := imgs[segs[i].CustomEmojiID]; ok {
+			segs[i].EmojiImage = b
+		}
+	}
+}
+
+func bestThumbSize(doc *tg.Document) string {
+	best, bestArea := "", 0
+	for _, t := range doc.Thumbs {
+		ps, ok := t.(*tg.PhotoSize)
+		if !ok {
 			continue
 		}
-		seen[id] = true
-		if _, cached := emojiCache.get(id); cached {
-			continue
+		if area := ps.W * ps.H; area > bestArea {
+			best, bestArea = ps.Type, area
 		}
-		if len(seen) > maxCustomEmojiPerQuote {
-			break
+	}
+	return best
+}
+
+func statusEmojiID(u *tg.User) int64 {
+	st, ok := u.GetEmojiStatus()
+	if !ok {
+		return 0
+	}
+	now := int(time.Now().Unix())
+	switch s := st.(type) {
+	case *tg.EmojiStatus:
+		if until, ok := s.GetUntil(); ok && until != 0 && until < now {
+			return 0
+		}
+		return s.DocumentID
+	case *tg.EmojiStatusCollectible:
+		if until, ok := s.GetUntil(); ok && until != 0 && until < now {
+			return 0
+		}
+		return s.DocumentID
+	}
+	return 0
+}
+
+func loadCustomEmoji(ctx *ext.Context, ids []int64) map[int64][]byte {
+	out := map[int64][]byte{}
+	var need []int64
+	for _, id := range ids {
+		if b, cached := emojiCache.get(id); cached {
+			if len(b) > 0 {
+				out[id] = b
+			}
+			continue
 		}
 		need = append(need, id)
 	}
-
 	if len(need) > 0 {
 		docs, err := ctx.Raw.MessagesGetCustomEmojiDocuments(ctx, need)
 		if err != nil {
 			log.Printf("getCustomEmojiDocuments: %v", err)
-			return
+			return nil
 		}
 
 		var wg sync.WaitGroup
@@ -114,27 +161,11 @@ func attachCustomEmoji(ctx *ext.Context, segs []renderclient.Segment) {
 		}
 
 		wg.Wait()
-	}
-
-	for i := range segs {
-		if id := segs[i].CustomEmojiID; id != 0 {
+		for _, id := range need {
 			if b, ok := emojiCache.get(id); ok && len(b) > 0 {
-				segs[i].EmojiImage = b
+				out[id] = b
 			}
 		}
 	}
-}
-
-func bestThumbSize(doc *tg.Document) string {
-	best, bestArea := "", 0
-	for _, t := range doc.Thumbs {
-		ps, ok := t.(*tg.PhotoSize)
-		if !ok {
-			continue
-		}
-		if area := ps.W * ps.H; area > bestArea {
-			best, bestArea = ps.Type, area
-		}
-	}
-	return best
+	return out
 }

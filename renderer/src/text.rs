@@ -4,7 +4,7 @@ use skia_safe::{
     surfaces,
     textlayout::{
         FontCollection, ParagraphBuilder, ParagraphStyle, PlaceholderAlignment, PlaceholderStyle,
-        TextDecoration, TextStyle,
+        TextAlign, TextBaseline, TextDecoration, TextStyle,
     },
     Color, FontStyle, Image,
 };

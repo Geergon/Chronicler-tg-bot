@@ -1,9 +1,9 @@
 use skia_safe::Color;
 use skia_safe::Image;
 
-use skia_safe::surfaces;
 use skia_safe::Paint;
 use skia_safe::PathBuilder;
+use skia_safe::surfaces;
 
 use crate::image::finalize_size;
 use crate::image::resize_image;

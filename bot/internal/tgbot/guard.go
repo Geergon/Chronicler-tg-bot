@@ -38,7 +38,7 @@ func firstTime(key string) bool {
 
 type Handler func(ctx *ext.Context, update *ext.Update) error
 
-func Guard(name string, fn Handler) Handler {
+func Guard(name string, fn func(ctx *ext.Context, update *ext.Update) error) func(ctx *ext.Context, update *ext.Update) error {
 	return func(ctx *ext.Context, update *ext.Update) error {
 		msg := update.EffectiveMessage
 		if msg == nil {

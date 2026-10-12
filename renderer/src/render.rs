@@ -92,6 +92,29 @@ impl Renderer {
             );
             let name_leaf = Node::leaf(Some(name_img), LeafOpts::default());
 
+            let left = match p.name_emoji.as_ref() {
+                Some(emoji) => {
+                    let size = (s.name_font_size * 1.15).round().max(1.0);
+                    let scaled = resize_image(emoji, size as i32, size as i32);
+                    let emoji_leaf = Node::leaf(
+                        Some(scaled),
+                        LeafOpts {
+                            w: size,
+                            h: size,
+                            ..Default::default()
+                        },
+                    );
+                    Some(Node::new_box(BoxOpts {
+                        dir: Dir::Row,
+                        align: Align::Center,
+                        gap: s.name_font_size * 0.2,
+                        children: vec![name_leaf, emoji_leaf],
+                        ..Default::default()
+                    }))
+                }
+                None => name_leaf,
+            };
+
             match tag {
                 Some(tag) => children.push(Some(Node::new_box(BoxOpts {
                     dir: Dir::Row,
@@ -99,10 +122,10 @@ impl Renderer {
                     justify: Justify::Between, // name on the left, tag on the right
                     stretch: true,        // line the full width of the bubble
                     gap,
-                    children: vec![name_leaf, Some(tag)],
+                    children: vec![left, Some(tag)],
                     ..Default::default()
                 }))),
-                None => children.push(name_leaf),
+                None => children.push(left),
             }
             children.push(spacer(s.gap_after_name));
         }
@@ -221,6 +244,7 @@ impl Renderer {
                 bubble_color: m.bubble_color,
                 max_bubble_width,
                 media: m.media.clone(),
+                name_emoji: m.name_emoji.clone(),
             },
             s,
         );
@@ -280,11 +304,13 @@ impl Renderer {
                 segments: msg.segments.clone(),
                 bubble_color: msg.bubble_color,
                 media: msg.media.clone(),
+                name_emoji: None,
             };
             if !msg.standalone && is_first {
                 block.author_name = msg.author_name.clone();
                 block.avatar_img = msg.avatar_img.clone();
                 block.tag = msg.tag.clone();
+                block.name_emoji = msg.name_emoji.clone();
             }
 
             rows.push(Some(self.build_message_row(&block, max_bubble_width, s)?));
