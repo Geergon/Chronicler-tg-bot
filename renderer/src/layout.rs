@@ -1,6 +1,5 @@
-use skia_safe::{Canvas, Rect, surfaces};
-
 use crate::types::{Align, Dir, Justify, LeafOpts, Node, NodeKind};
+use skia_safe::{surfaces, Canvas, Rect};
 
 pub fn measure(n: &mut Node) {
     let Node {
@@ -198,4 +197,108 @@ pub fn spacer(h: f32) -> Option<Node> {
             ..Default::default()
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        tests_helper::leaf,
+        types::{BoxOpts, Pad},
+    };
+
+    use super::*;
+
+    #[test]
+    fn col_adds_heights_gaps_and_padding() {
+        let mut root = Node::new_box(BoxOpts {
+            dir: Dir::Col,
+            gap: 4.0,
+            pad: Pad {
+                t: 10.0,
+                r: 5.0,
+                b: 10.0,
+                l: 5.0,
+            },
+            children: vec![leaf(50.0, 20.0), leaf(80.0, 30.0)],
+            ..Default::default()
+        });
+        measure(&mut root);
+        assert_eq!((root.w, root.h), (90.0, 74.0)); // 80+2*5 ; 20+30+4+2*10
+    }
+
+    #[test]
+    fn row_takes_max_height_and_sums_widths() {
+        let mut root = Node::new_box(BoxOpts {
+            dir: Dir::Row,
+            gap: 6.0,
+            children: vec![leaf(40.0, 10.0), leaf(60.0, 25.0)],
+            ..Default::default()
+        });
+        measure(&mut root);
+        assert_eq!((root.w, root.h), (106.0, 25.0));
+    }
+
+    #[test]
+    fn max_w_clamps_container() {
+        let mut root = Node::new_box(BoxOpts {
+            dir: Dir::Col,
+            max_w: 50.0,
+            children: vec![leaf(200.0, 10.0)],
+            ..Default::default()
+        });
+        measure(&mut root);
+        assert_eq!(root.w, 50.0);
+    }
+
+    #[test]
+    fn between_pushes_second_child_to_right_edge() {
+        let mut root = Node::new_box(BoxOpts {
+            dir: Dir::Row,
+            justify: Justify::Between,
+            stretch: true,
+            children: vec![leaf(30.0, 10.0), leaf(20.0, 10.0)],
+            ..Default::default()
+        });
+        measure(&mut root);
+        root.w = 200.0; // що дасть батько
+        place(&mut root, 0.0, 0.0, 0.0);
+
+        let NodeKind::Box { children, .. } = &root.kind else {
+            unreachable!()
+        };
+        assert_eq!(children[0].x, 0.0);
+        assert_eq!(children[1].x, 180.0); // 200 - 20
+    }
+
+    #[test]
+    fn bleed_child_ignores_padding() {
+        let bleed = {
+            let mut n = leaf(100.0, 40.0).unwrap();
+            if let NodeKind::Leaf { bleed, .. } = &mut n.kind {
+                *bleed = true;
+            }
+            n
+        };
+        let mut root = Node::new_box(BoxOpts {
+            dir: Dir::Col,
+            pad: Pad {
+                t: 0.0,
+                r: 10.0,
+                b: 0.0,
+                l: 10.0,
+            },
+            children: vec![Some(bleed)],
+            ..Default::default()
+        });
+        measure(&mut root);
+        assert_eq!(root.w, 100.0);
+    }
+
+    #[test]
+    fn empty_box_does_not_panic() {
+        let mut root = Node::new_box(BoxOpts::default());
+        measure(&mut root);
+        place(&mut root, 0.0, 0.0, 0.0);
+        assert_eq!((root.w, root.h), (0.0, 0.0));
+    }
 }
