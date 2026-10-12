@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
-use skia_safe::{surfaces, textlayout::FontCollection, Canvas, Color, Image, Paint, Rect};
+use skia_safe::{Canvas, Color, Image, Paint, Rect, surfaces, textlayout::FontCollection};
 use std::{path::Path, rc::Rc};
 
 use crate::{
     avatar::{avatar_image_letters, initials},
     colors::{
-        avatar_color_from_id, name_color_from_id, ADMIN_TAG_BG, ADMIN_TAG_FG, MEMBER_TAG_BG,
-        MEMBER_TAG_FG, OWNER_TAG_BG, OWNER_TAG_FG,
+        ADMIN_TAG_BG, ADMIN_TAG_FG, MEMBER_TAG_BG, MEMBER_TAG_FG, OWNER_TAG_BG, OWNER_TAG_FG,
+        avatar_color_from_id, name_color_from_id,
     },
     config::UiConfig,
     fonts::init_fonts,

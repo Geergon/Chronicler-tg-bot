@@ -1,5 +1,5 @@
 use crate::types::{Align, Dir, Justify, LeafOpts, Node, NodeKind};
-use skia_safe::{surfaces, Canvas, Rect};
+use skia_safe::{Canvas, Rect, surfaces};
 
 pub fn measure(n: &mut Node) {
     let Node {

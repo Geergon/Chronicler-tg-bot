@@ -46,7 +46,7 @@ fn crop_to_aspect(img: &Image, target_ratio: f32) -> Image {
 }
 
 fn crop_to_square(img: &Image) -> Image {
-    crop_to_aspect(&img, 1.0)
+    crop_to_aspect(img, 1.0)
 }
 
 pub fn single_media_leaf(media: &MediaItem, max_w: f32, s: &Sizes) -> Node {
@@ -64,7 +64,7 @@ pub fn single_media_leaf(media: &MediaItem, max_w: f32, s: &Sizes) -> Node {
 
     let source = if h > max_h {
         h = max_h;
-        crop_to_aspect(original, (w / h) as f32)
+        crop_to_aspect(original, w / h)
     } else {
         original.clone()
     };
@@ -171,7 +171,7 @@ pub fn build_standalone_media_node(media: &[MediaItem], max_width: f32, s: &Size
     if media.len() == 1 {
         return single_media_leaf(&media[0], max_width, s);
     }
-    media_group_row(&media, max_width, s)
+    media_group_row(media, max_width, s)
 }
 
 // video play icon

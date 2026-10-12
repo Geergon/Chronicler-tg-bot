@@ -1,6 +1,6 @@
 use skia_safe::{
-    image::CachingHint, surfaces, textlayout::FontCollection, AlphaType, Color, ColorType, Image,
-    ImageInfo,
+    AlphaType, Color, ColorType, Image, ImageInfo, image::CachingHint, surfaces,
+    textlayout::FontCollection,
 };
 
 use crate::{
@@ -11,9 +11,9 @@ use crate::{
 };
 
 thread_local! {
-    static FONTS: FontCollection = init_fonts("./fonts".to_string()).expect("fixture fonts");
+    static FONTS: FontCollection = init_fonts("./fonts").expect("fixture fonts");
     static RENDERER: Renderer =
-        Renderer::new("./fonts".to_string(), UiConfig::default()).expect("renderer");
+        Renderer::new("./fonts", UiConfig::default()).expect("renderer");
 }
 
 pub fn with_fonts<R>(f: impl FnOnce(&FontCollection) -> R) -> R {
@@ -66,6 +66,10 @@ pub fn pixels(img: &Image) -> Vec<u8> {
     buf
 }
 
+fn rgba(p: &[u8]) -> &[[u8; 4]] {
+    p.as_chunks::<4>().0
+}
+
 pub fn pixel(img: &Image, x: i32, y: i32) -> Color {
     let p = pixels(img);
     let i = ((y * img.width() + x) * 4) as usize;
@@ -74,18 +78,21 @@ pub fn pixel(img: &Image, x: i32, y: i32) -> Color {
 
 pub fn _is_blank(img: &Image) -> bool {
     let p = pixels(img);
-    p.chunks_exact(4).all(|px| px[3] == 0) || p.chunks_exact(4).all(|px| px == &p[..4])
+    let px = rgba(&p);
+    px.iter().all(|c| c[3] == 0) || px.iter().all(|c| *c == px[0])
 }
 
 pub fn has_color(img: &Image) -> bool {
-    pixels(img).chunks_exact(4).any(|px| {
-        let (r, g, b) = (px[0] as i32, px[1] as i32, px[2] as i32);
-        px[3] > 128 && (r - g).abs().max((g - b).abs()).max((r - b).abs()) > 60
+    let p = pixels(img);
+    rgba(&p).iter().any(|&[r, g, b, a]| {
+        let (r, g, b) = (r as i32, g as i32, b as i32);
+        a > 128 && (r - g).abs().max((g - b).abs()).max((r - b).abs()) > 60
     })
 }
 
 pub fn has_white(img: &Image) -> bool {
-    pixels(img)
-        .chunks_exact(4)
-        .any(|px| px[3] > 200 && px[0] > 230 && px[1] > 230 && px[2] > 230)
+    let p = pixels(img);
+    rgba(&p)
+        .iter()
+        .any(|&[r, g, b, a]| a > 200 && r > 230 && g > 230 && b > 230)
 }

@@ -31,7 +31,7 @@ pub fn initials(name: &str) -> String {
     }
 
     let chars: Vec<char> = words[0].chars().collect();
-    if chars.len() == 0 {
+    if chars.is_empty() {
         return "?".to_string();
     }
     chars[0].to_uppercase().to_string()
@@ -57,12 +57,12 @@ pub fn avatar_image_letters(
     let letter_count = letter.chars().count();
 
     // Target text size relative to avatar
-    let target_ratio: f32;
-    if letter_count > 1 {
-        target_ratio = 0.5; // the text takes 50% of the avatar height
+    let target_ratio: f32 = if letter_count > 1 {
+        0.5 // the text takes 50% of the avatar height
     } else {
-        target_ratio = 0.6; // 60% for one letter
-    }
+        0.6 // 60% for one letter
+    };
+
     let target_h = size as f32 * target_ratio;
 
     // Render with a large fontSize to avoid losing quality when scaling
@@ -96,7 +96,7 @@ fn render_avatar_text(fonts: &FontCollection, letters: &str, font_size: f32) -> 
     ts.set_font_size(font_size);
     ts.set_color(Color::WHITE);
     ts.set_font_style(FontStyle::bold());
-    ts.set_font_families(&TEXT_FAMILIES);
+    ts.set_font_families(TEXT_FAMILIES);
 
     let mut builder = ParagraphBuilder::new(&para_style, fonts.clone());
     builder.push_style(&ts);

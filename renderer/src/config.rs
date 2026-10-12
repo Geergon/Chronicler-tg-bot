@@ -105,7 +105,7 @@ impl ConfigManager {
     }
 
     fn load_from_file(path: &str) -> Result<Config> {
-        let content = fs::read_to_string(&path)?;
+        let content = fs::read_to_string(path)?;
         let config: Config = toml::from_str(&content)?;
 
         Ok(config)

@@ -254,7 +254,7 @@ fn into_chat_messages(
                     });
                 }
                 Err(e) => {
-                    eprintln!("message #{i}: media {} skipped: {e:#}", &img.part);
+                    eprintln!("message #{i}: media {} skipped: {e:#}", img.part);
                 }
             }
         }
@@ -289,7 +289,7 @@ fn into_chat_messages(
             }),
             avatar_img,
             standalone: m.standalone,
-            reply: reply,
+            reply,
             segments,
             bubble_color: parse_color(&m.bubble_color).with_context(ctx)?,
             media,
@@ -561,9 +561,18 @@ mod tests {
 
     #[test]
     fn parse_color_forms() {
-        assert_eq!(parse_color("#FF8000").unwrap(), Color::from_argb(255, 255, 128, 0));
-        assert_eq!(parse_color("#80FF8000").unwrap(), Color::from_argb(128, 255, 128, 0));
-        assert_eq!(parse_color("FF8000").unwrap(), Color::from_argb(255, 255, 128, 0)); // без #
+        assert_eq!(
+            parse_color("#FF8000").unwrap(),
+            Color::from_argb(255, 255, 128, 0)
+        );
+        assert_eq!(
+            parse_color("#80FF8000").unwrap(),
+            Color::from_argb(128, 255, 128, 0)
+        );
+        assert_eq!(
+            parse_color("FF8000").unwrap(),
+            Color::from_argb(255, 255, 128, 0)
+        ); // без #
     }
 
     #[test]
