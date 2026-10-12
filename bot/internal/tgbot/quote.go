@@ -6,6 +6,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Geergon/Chronicler-tg-bot/internal/renderclient"
 	"github.com/celestix/gotgproto/ext"
@@ -224,7 +225,11 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 	userFirstName := update.EffectiveUser().FirstName
 	userLastName := update.EffectiveUser().LastName
 
+	lg := func(format string, a ...any) {
+		log.Printf("[chat=%d msg=%d] "+format, append([]any{chatID, msg.ID}, a...)...)
+	}
 	args := strings.Fields(update.EffectiveMessage.Text)
+	lg("args=%q reply=%v", args, replyEnable)
 
 	if len(args) == 1 {
 
@@ -235,6 +240,9 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 		if quoteData == nil {
 			return fmt.Errorf("extractQuoteData nil")
 		}
+		lg("quote data: author=%d forwarded=%v text=%d runes media=%d has_reply=%v",
+			quoteData.Author.ID, quoteData.Author.Forwarded,
+			utf8.RuneCountInString(quoteData.Text), len(quoteData.Media), quoteData.ReplyTo != nil)
 
 		var replyInfo *renderclient.Reply
 		if replyEnable {
@@ -269,6 +277,7 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 			entities = parseEntities(text, quoteData.replyMsg.Entities, color.RGBA{255, 255, 255, 255})
 		}
 		attachCustomEmoji(ctx, entities)
+		lg("segments=%d", len(entities))
 
 		authorID := quoteData.Author.ID
 		authorName := quoteData.Author.FirstName
@@ -284,6 +293,7 @@ func HandleQuote(ctx *ext.Context, update *ext.Update, replyEnable bool) error {
 		}
 
 		avatar := getAvatar(ctx, authorID, quoteData.Author.Username, quoteData.UserMap, quoteData.ChatMap)
+		lg("avatar: %d bytes", len(avatar))
 
 		messages := []renderclient.Message{
 			{

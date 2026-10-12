@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strconv"
-	"sync"
 
 	"github.com/Geergon/Chronicler-tg-bot/internal/database"
 	"github.com/Geergon/Chronicler-tg-bot/internal/tgbot"
@@ -17,28 +17,22 @@ import (
 	"github.com/celestix/gotgproto/sessionMaker"
 	"github.com/glebarez/sqlite"
 	"github.com/gotd/td/tg"
-	"github.com/joho/godotenv"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
 	chatStickerSetDb *sql.DB
 	quotesDb         *sql.DB
-	viperMutex       sync.RWMutex
 )
 
 func init() {
-	log.SetOutput(&lumberjack.Logger{
+	log.SetOutput(io.MultiWriter(os.Stderr, &lumberjack.Logger{
 		Filename:   "bot.log",
 		MaxSize:    10,
 		MaxBackups: 3,
 		MaxAge:     28,
 		Compress:   true,
-	})
-
-	if err := godotenv.Load(); err != nil {
-		log.Print("No .env file found")
-	}
+	}))
 }
 
 func main() {
@@ -111,8 +105,20 @@ func main() {
 
 	dispatcher := client.Dispatcher
 
+	for _, c := range []struct {
+		name  string
+		reply bool
+	}{{"c", false}, {"q", false}, {"cr", true}, {"qr", true}} {
+		c := c
+		dispatcher.AddHandler(handlers.NewCommand(c.name, tgbot.Guard(c.name,
+			func(ctx *ext.Context, u *ext.Update) error {
+				return tgbot.HandleQuote(ctx, u, c.reply)
+			})))
+	}
+
 	dispatcher.AddHandler(handlers.NewCommand("c", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
+			log.Println("/c command processing")
 			if err := tgbot.HandleQuote(ctx, update, false); err != nil {
 				log.Printf("quote error: %v", err)
 			}
@@ -122,6 +128,7 @@ func main() {
 
 	dispatcher.AddHandler(handlers.NewCommand("q", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
+			log.Println("/q command processing")
 			if err := tgbot.HandleQuote(ctx, update, false); err != nil {
 				log.Printf("quote error: %v", err)
 			}
@@ -131,6 +138,7 @@ func main() {
 
 	dispatcher.AddHandler(handlers.NewCommand("cr", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
+			log.Println("/cr command processing")
 			if err := tgbot.HandleQuote(ctx, update, true); err != nil {
 				log.Printf("quote error: %v", err)
 			}
@@ -140,6 +148,7 @@ func main() {
 
 	dispatcher.AddHandler(handlers.NewCommand("qr", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
+			log.Println("/qr command processing")
 			if err := tgbot.HandleQuote(ctx, update, true); err != nil {
 				log.Printf("quote error: %v", err)
 			}
@@ -149,6 +158,7 @@ func main() {
 
 	dispatcher.AddHandler(handlers.NewCommand("cs", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
+			log.Println("/cs command processing")
 			if err := tgbot.HandleSaveSticker(ctx, update, chatStickerSetDb, quotesDb, client.Self.Username, botToken); err != nil {
 				log.Printf("sticker set error: %v", err)
 			}
@@ -158,6 +168,7 @@ func main() {
 
 	dispatcher.AddHandler(handlers.NewCommand("crand", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
+			log.Println("/crand command processing")
 			if err := tgbot.HandleRandomQuotes(ctx, update, quotesDb, botToken); err != nil {
 				log.Printf("random quotes error: %v", err)
 			}
@@ -167,6 +178,7 @@ func main() {
 
 	dispatcher.AddHandler(handlers.NewCommand("crsave", func(ctx *ext.Context, update *ext.Update) error {
 		go func() {
+			log.Println("/crsave command processing")
 			if err := tgbot.SaveStickerSetInDB(ctx, update, quotesDb, botToken); err != nil {
 				log.Printf("save stickerset in db error: %v", err)
 			}
@@ -211,6 +223,7 @@ func main() {
 		return nil
 	}))
 
-	fmt.Printf("Bot (@%s) started...\n", client.Self.Username)
+	log.Printf("bot starting: pid=%d renderer=%s", os.Getpid(), os.Getenv("RENDERER_URL"))
+	log.Printf("Bot (@%s) started...\n", client.Self.Username)
 	client.Idle()
 }

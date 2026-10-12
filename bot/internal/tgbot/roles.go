@@ -32,6 +32,7 @@ func getChatRoles(ctx *ext.Context, chatID int64) map[int64]roleInfo {
 	rolesCacheMu.Lock()
 	if e, ok := rolesCache[chatID]; ok && time.Since(e.at) < rolesTTL {
 		rolesCacheMu.Unlock()
+		log.Printf("roles: cache hit chat=%d (%d entries)", chatID, len(e.roles))
 		return e.roles
 	}
 	rolesCacheMu.Unlock()
@@ -47,6 +48,7 @@ func getChatRoles(ctx *ext.Context, chatID int64) map[int64]roleInfo {
 	rolesCacheMu.Lock()
 	rolesCache[chatID] = rolesEntry{at: time.Now(), roles: roles}
 	rolesCacheMu.Unlock()
+	log.Printf("roles: fetched chat=%d, %d privileged users", chatID, len(roles))
 	return roles
 }
 

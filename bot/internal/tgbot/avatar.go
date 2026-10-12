@@ -87,6 +87,7 @@ func getAvatar(ctx *ext.Context, id int64, username string,
 	if avatar != nil && pid != 0 {
 		avatars.put(pid, avatar)
 	}
+	log.Printf("avatar user=%d bytes=%d", id, len(avatar)) // cache | telegram | telega.one | none
 	return avatar
 }
 

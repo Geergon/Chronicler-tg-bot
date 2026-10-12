@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"image/color"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -200,6 +201,7 @@ func (c *Client) Render(ctx context.Context, msgs []Message) ([]byte, error) {
 	for attempt := 0; attempt <= c.retries; attempt++ {
 		if attempt > 0 {
 			// 503 = render queue full, waiting
+			log.Printf("renderer: attempt %d/%d failed: %v", attempt+1, c.retries+1, err)
 			select {
 			case <-time.After(time.Duration(attempt) * 300 * time.Millisecond):
 			case <-ctx.Done():
