@@ -25,7 +25,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use config::{ConfigManager, UiConfig};
+use config::ConfigManager;
 use serde::Deserialize;
 use skia_safe::{Color, Data, EncodedImageFormat, Image};
 use tokio::sync::oneshot;

@@ -7,9 +7,7 @@ use std::{
 
 use anyhow::Result;
 use arc_swap::ArcSwap;
-use notify::{
-    event::ModifyKind, Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher,
-};
+use notify::{Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]

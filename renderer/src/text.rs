@@ -1,12 +1,12 @@
 use crate::{fonts::*, image::resize_image, types::TextSegment};
 use skia_safe::{
-    Color, FontStyle, Image, Paint,
     font_style::{Slant, Weight, Width},
     surfaces,
     textlayout::{
         FontCollection, ParagraphBuilder, ParagraphStyle, PlaceholderAlignment, PlaceholderStyle,
-        TextAlign, TextBaseline, TextDecoration, TextStyle,
+        TextDecoration, TextStyle,
     },
+    Color, FontStyle, Image,
 };
 
 pub const MONO_FAMILIES: &[&str] = &[NOTO_MONO, NOTO_CJK, NOTO_CUNEIFORM, NOTO_EMOJI];
@@ -37,7 +37,7 @@ fn make_text_style(seg: &TextSegment, font_size: f32) -> TextStyle {
     ));
 
     if seg.spoiler {
-        let mut bg = Paint::default();
+        // let mut bg = Paint::default();
         // bg.set_color(color.with_a(220));
         // ts.set_background_paint(&bg);
         // ts.set_color(Color::TRANSPARENT);
