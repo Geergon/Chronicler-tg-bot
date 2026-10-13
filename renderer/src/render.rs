@@ -156,7 +156,7 @@ impl Renderer {
                 &reply_segs,
                 reply_text_max_width,
                 s.reply_font_size,
-                Some(2),
+                Some(5),
             );
 
             let line_img = draw_reply_line(s.reply_line_width, reply_h, accent);
