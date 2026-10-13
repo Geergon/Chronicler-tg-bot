@@ -1,5 +1,9 @@
 # Chronicler-tg-bot
 
+<p align="center">
+  <img src="renderer/out1.webp" width="320">
+</p>
+
 Telegram bot that turns chat messages into quote stickers. Supports rich text, emoji (including Telegram custom emoji), photos, albums, videos, replies, member/admin tags, spoilers, message stacks, and saving stickers into sticker packs.
 
 ## Features
