@@ -4,16 +4,19 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"mime/multipart"
 	"net/http"
-	"strings"
+	"net/url"
+	"time"
 
 	"github.com/Geergon/Chronicler-tg-bot/internal/database"
 	"github.com/celestix/gotgproto/ext"
 	"github.com/gotd/td/tg"
+	"github.com/gotd/td/tgerr"
 )
 
 const botAPIBase = "https://api.telegram.org/bot"
@@ -33,7 +36,7 @@ func HandleSaveSticker(ctx *ext.Context, update *ext.Update, db, quoteDB *sql.DB
 	replyHeader, ok := msg.ReplyTo.(*tg.MessageReplyHeader)
 	if !ok || replyHeader == nil {
 		ctx.SendMessage(update.EffectiveChat().GetID(), &tg.MessagesSendMessageRequest{
-			Message: "Використай /qs у відповідь на стікер",
+			Message: "Використай /cs у відповідь на стікер",
 		})
 		return nil
 	}
@@ -78,7 +81,7 @@ func HandleSaveSticker(ctx *ext.Context, update *ext.Update, db, quoteDB *sql.DB
 		}
 	}
 
-	stickerLink, err := SendQuoteSticker(db, quoteDB, botToken, botUsername, chatName, userName, chatID, userID, creatorID, stickerBytes)
+	stickerLink, err := SendQuoteSticker(ctx, db, quoteDB, botToken, botUsername, chatName, userName, chatID, userID, creatorID, stickerBytes)
 	if err != nil {
 		return fmt.Errorf("SendQuoteStickerFromBytes: %w", err)
 	}
@@ -163,13 +166,18 @@ func botAPIRequest(botToken, method string, fields map[string]string, fileField,
 	}
 	w.Close()
 
-	resp, err := http.Post(
+	c := &http.Client{Timeout: 15 * time.Second}
+	resp, err := c.Post(
 		botAPIBase+botToken+"/"+method,
 		w.FormDataContentType(),
 		&body,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("http post: %w", err)
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			err = ue.Err
+		}
+		return nil, fmt.Errorf("bot api %s: %w", method, err)
 	}
 	defer resp.Body.Close()
 
@@ -184,7 +192,7 @@ func botAPIRequest(botToken, method string, fields map[string]string, fileField,
 	return apiResp.Result, nil
 }
 
-func SendQuoteSticker(db, quoteDB *sql.DB, botToken, botUsername, chatName, userName string, chatID, userID, creatorID int64, stickerBytes []byte) (string, error) {
+func SendQuoteSticker(ctx *ext.Context, db, quoteDB *sql.DB, botToken, botUsername, chatName, userName string, chatID, userID, creatorID int64, stickerBytes []byte) (string, error) {
 	absID := chatID
 	if absID < 0 {
 		absID = -absID
@@ -201,71 +209,63 @@ func SendQuoteSticker(db, quoteDB *sql.DB, botToken, botUsername, chatName, user
 	setName := packInfo.Name
 	stickerLink := "https://t.me/addstickers/" + setName
 
-	log.Printf("chatID:%d, userID:%d, creatorID:%d", chatID, userID, creatorID)
-	log.Printf("addStickerToSet: userID=%d setName=%s", userID, setName)
-	_, addErr := botAPIRequest(botToken, "addStickerToSet", map[string]string{
-		"user_id": fmt.Sprint(userID),
-		"name":    setName,
-		"emojis":  "🖼",
-	}, "png_sticker", "sticker.webp", stickerBytes)
+	docClass, err := uploadMedia(ctx, chatID, stickerBytes, "image/webp")
+	if err != nil {
+		return "", fmt.Errorf("upload sticker: %w", err)
+	}
+	doc, ok := docClass.(*tg.Document)
+	if !ok {
+		return "", fmt.Errorf("unexpected doc type: %T", docClass)
+	}
+	item := tg.InputStickerSetItem{
+		Document: &tg.InputDocument{
+			ID:            doc.ID,
+			AccessHash:    doc.AccessHash,
+			FileReference: doc.FileReference,
+		},
+		Emoji: "🖼",
+	}
+
+	log.Printf("[stickers] add to set=%s via MTProto", setName)
+	_, addErr := ctx.Raw.StickersAddStickerToSet(ctx, &tg.StickersAddStickerToSetRequest{
+		Stickerset: &tg.InputStickerSetShortName{ShortName: setName},
+		Sticker:    item,
+	})
 
 	if addErr != nil {
-		log.Printf("addStickerToSet error: %v", addErr)
-		errStr := addErr.Error()
+		log.Printf("[stickers] add error: %v", addErr)
 
-		if strings.Contains(errStr, "PEER_ID_INVALID") ||
-			strings.Contains(errStr, "bot was blocked") {
-			return "", fmt.Errorf("user %d never started the bot: %w", userID, addErr)
+		if !tgerr.Is(addErr, "STICKERSET_INVALID", "STICKERS_TOO_MUCH") {
+			return "", fmt.Errorf("addStickerToSet: %w", addErr)
 		}
 
-		// if pack doesn't exist or full create new
-		if strings.Contains(errStr, "TOO_MUCH") || strings.Contains(errStr, "STICKERSET_INVALID") {
-			packInfo.PackIndex++
-			packInfo.Name = fmt.Sprintf("quotes_%d_v%d_by_%s", absID, packInfo.PackIndex, botUsername)
-			packInfo.Title = fmt.Sprintf("%s | v%d by @%s", chatName, packInfo.PackIndex, botUsername)
-			if err := database.SaveOrUpdatePackInfo(db, chatID, packInfo); err != nil {
-				return "", fmt.Errorf("savePackInfo: %w", err)
-			}
-			setName = packInfo.Name
-			stickerLink = "https://t.me/addstickers/" + setName
+		packInfo.PackIndex++
+		packInfo.Name = fmt.Sprintf("quotes_%d_v%d_by_%s", absID, packInfo.PackIndex, botUsername)
+		packInfo.Title = fmt.Sprintf("%s | v%d by @%s", chatName, packInfo.PackIndex, botUsername)
+		setName = packInfo.Name
+		stickerLink = "https://t.me/addstickers/" + setName
 
-			log.Printf("createNewStickerSet attempt 1: creatorID=%d setName=%s", creatorID, setName)
-			_, err = botAPIRequest(botToken, "createNewStickerSet", map[string]string{
-				"user_id": fmt.Sprint(creatorID),
-				"name":    setName,
-				"title":   packInfo.Title,
-				"emojis":  "🖼",
-			}, "png_sticker", "sticker.webp", stickerBytes)
-			if err != nil {
-				log.Printf("createNewStickerSet failed: userID=%d err=%v", creatorID, err)
+		owner, ownerID, err := pickStickerOwner(ctx, creatorID, userID)
+		if err != nil {
+			return "", err
+		}
+		log.Printf("[stickers] create set=%s owner=%d", setName, ownerID)
 
-				if creatorID != userID {
-					log.Printf("retrying createNewStickerSet with userID=%d", userID)
-					_, err = botAPIRequest(botToken, "createNewStickerSet", map[string]string{
-						"user_id": fmt.Sprint(userID),
-						"name":    setName,
-						"title":   packInfo.Title,
-						"emojis":  "🖼",
-					}, "png_sticker", "sticker.webp", stickerBytes)
-					if err != nil {
-						log.Printf("createNewStickerSet with userID also failed: %v", err)
-					}
-				}
+		_, err = ctx.Raw.StickersCreateStickerSet(ctx, &tg.StickersCreateStickerSetRequest{
+			UserID:    owner,
+			Title:     packInfo.Title,
+			ShortName: setName,
+			Stickers:  []tg.InputStickerSetItem{item},
+		})
+		if err != nil {
+			return "", fmt.Errorf("createStickerSet (owner=%d): %w", ownerID, err)
+		}
 
-				if err != nil {
-					if strings.Contains(err.Error(), "PEER_ID_INVALID") {
-						return "", fmt.Errorf("createNewStickerSet PEER_ID_INVALID: %v", err)
-					}
-					return "", fmt.Errorf("createNewStickerSet: %w", err)
-				}
-			}
-
-			if err := database.SaveCreatorID(db, chatID, creatorID); err != nil {
-				log.Printf("saveCreatorID warning: %v", err)
-			}
-
-		} else {
-			return "", fmt.Errorf("addStickerToSet: %w", addErr)
+		if err := database.SaveOrUpdatePackInfo(db, chatID, packInfo); err != nil {
+			return "", fmt.Errorf("savePackInfo: %w", err)
+		}
+		if err := database.SaveCreatorID(db, chatID, ownerID); err != nil {
+			log.Printf("saveCreatorID warning: %v", err)
 		}
 	}
 
@@ -296,4 +296,17 @@ func SendQuoteSticker(db, quoteDB *sql.DB, botToken, botUsername, chatName, user
 	}
 
 	return stickerLink, nil
+}
+
+func pickStickerOwner(ctx *ext.Context, ids ...int64) (tg.InputUserClass, int64, error) {
+	for _, id := range ids {
+		peer := ctx.PeerStorage.GetInputPeerById(id)
+		if peer == nil {
+			continue
+		}
+		if u, ok := toInputUser(peer); ok {
+			return u, id, nil
+		}
+	}
+	return nil, 0, fmt.Errorf("none of the owner candidates %v is known to the client", ids)
 }
